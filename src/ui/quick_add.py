@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from src.data_manager import add_transaction
+from src.supabase_client import add_transaction
 
 def render_quick_add():
     if not st.session_state.get('show_quick_add', False):

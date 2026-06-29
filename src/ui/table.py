@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from src.data_manager import get_all_transactions, save_dataframe
+from src.supabase_client import get_all_transactions, save_dataframe
 from src.config import COLORS
 from src.currency import convert_pln_to_usd
 

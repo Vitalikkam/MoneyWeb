@@ -23,7 +23,7 @@ if df.empty:
     st.info("💾 No transactions yet. Add one or import CSV.")
     st.stop()
 
-# Get data with balance (for compatibility with existing UI)
+# Get data with balance
 def add_balance_column(df):
     df = df.copy()
     df['Deposit'] = pd.to_numeric(df['Deposit'], errors='coerce').fillna(0)
@@ -38,7 +38,6 @@ show_table = st.session_state.get('show_table', False)
 if show_table:
     col_table, col_charts = st.columns([0.4, 0.6])
     with col_table:
-        # Note: render_table() currently uses data_manager. We'll update it separately.
         render_table()
     with col_charts:
         render_charts(df_balance)

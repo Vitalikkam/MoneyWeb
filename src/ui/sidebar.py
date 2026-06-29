@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from src.currency import get_current_rate
-from src.data_manager import append_csv_data, export_to_csv, clear_all_data
+from src.supabase_client import clear_all_data, export_to_csv, append_csv_data
 
 def render_sidebar():
     with st.sidebar:

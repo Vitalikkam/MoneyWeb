@@ -8,7 +8,11 @@ from src.ui.table import render_table, render_kpi, get_data_with_balance
 from src.ui.charts import render_charts
 import pandas as pd
 
-st.set_page_config(page_title="💰 Cash Register", layout="wide")
+st.set_page_config(
+    page_title="💰 Cash Register",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 apply_dark_theme()
 
 render_sidebar()

@@ -7,7 +7,6 @@ def render_header():
 
     if st.button("🔧 Reset sidebar view"):
         st.session_state.sidebar_reset_requested = True
-        st.experimental_rerun()
 
     if st.session_state.get('sidebar_reset_requested', False):
         st.markdown(

@@ -102,9 +102,9 @@ def render_table():
             return f'color: {COLORS["red"]}; font-weight: 600;'
         return ''
     
-    styled_df = df_with_balance.style.applymap(color_balance, subset=['Balance'])
-    styled_df = styled_df.applymap(color_deposit, subset=['Deposit'])
-    styled_df = styled_df.applymap(color_withdrawal, subset=['Withdrawal'])
+    styled_df = df_with_balance.style.map(color_balance, subset=['Balance'])
+    styled_df = styled_df.map(color_deposit, subset=['Deposit'])
+    styled_df = styled_df.map(color_withdrawal, subset=['Withdrawal'])
     
     st.dataframe(
         styled_df,

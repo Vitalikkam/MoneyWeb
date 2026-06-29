@@ -16,6 +16,52 @@ st.set_page_config(
 apply_dark_theme()
 
 render_sidebar()
+
+st.markdown(
+    """
+    <style>
+        section[data-testid="stSidebar"] {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            width: 300px !important;
+            min-width: 300px !important;
+            transform: none !important;
+        }
+    </style>
+    <script>
+    (function() {
+        const showSidebar = () => {
+            const sidebar = document.querySelector('section[data-testid="stSidebar"]');
+            const button = document.querySelector(
+                'button[aria-label*="sidebar"], button[title*="sidebar"], button[data-testid*="sidebar"]'
+            );
+            if (sidebar) {
+                sidebar.style.display = 'block';
+                sidebar.style.visibility = 'visible';
+                sidebar.style.opacity = '1';
+                sidebar.style.width = '300px';
+                sidebar.style.minWidth = '300px';
+                sidebar.style.transform = 'none';
+            }
+            const hidden = sidebar && (sidebar.offsetWidth === 0 || window.getComputedStyle(sidebar).visibility === 'hidden');
+            if (button && hidden) {
+                button.click();
+            }
+        };
+        let attempts = 0;
+        const interval = setInterval(() => {
+            showSidebar();
+            attempts += 1;
+            if (attempts > 12) clearInterval(interval);
+        }, 250);
+        setTimeout(() => clearInterval(interval), 3500);
+    })();
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
+
 render_header()
 render_quick_add()
 

@@ -1,5 +1,5 @@
 import streamlit as st
-from src.api_client import get_all_transactions, add_transaction, save_dataframe, get_summary
+from src.supabase_client import get_all_transactions, add_transaction, save_dataframe, delete_transaction, get_summary
 from src.styles import apply_dark_theme
 from src.data_manager import init_db
 from src.ui.sidebar import render_sidebar

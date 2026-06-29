@@ -64,7 +64,7 @@ def render_sidebar():
                     st.error("❌ Failed to fetch rate")
                 st.rerun()
         with col2:
-            if st.button("📋 Log", use_container_width=True):
+            if st.button("📋", use_container_width=True):
                 st.session_state.show_log = not st.session_state.get('show_log', False)
         
         # Show debug log if enabled

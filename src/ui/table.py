@@ -13,31 +13,35 @@ def add_balance_column(df):
 
 def get_data_with_balance():
     df = get_all_transactions()
-    return None if df.empty else add_balance_column(df)
+    if df.empty:
+        return None
+    return add_balance_column(df)
 
 def render_kpi(df_with_balance):
     total_dep = df_with_balance['Deposit'].sum()
     total_with = df_with_balance['Withdrawal'].sum()
     current_bal = df_with_balance['Balance'].iloc[-1] if not df_with_balance.empty else 0
-    delta = df_with_balance['Balance'].iloc[-1] - df_with_balance['Balance'].iloc[-2] if len(df_with_balance) > 1 else 0
+    delta = 0
+    if len(df_with_balance) > 1:
+        delta = df_with_balance['Balance'].iloc[-1] - df_with_balance['Balance'].iloc[-2]
     
     rate = st.session_state.get('display_rate', 3.766)
-    dep_usd = convert_pln_to_usd(total_dep, rate)
-    with_usd = convert_pln_to_usd(total_with, rate)
-    bal_usd = convert_pln_to_usd(current_bal, rate)
+    total_dep_usd = convert_pln_to_usd(total_dep, rate)
+    total_with_usd = convert_pln_to_usd(total_with, rate)
+    current_bal_usd = convert_pln_to_usd(current_bal, rate)
     delta_usd = convert_pln_to_usd(delta, rate)
     
     st.subheader("📊 Summary")
     col1, col2, col3 = st.columns(3)
-    col1.metric("📥 Deposits (PLN)", f"{total_dep:,.2f} zł")
-    col2.metric("📤 Withdrawals (PLN)", f"{total_with:,.2f} zł")
-    col3.metric("💰 Balance (PLN)", f"{current_bal:,.2f} zł", delta=f"{delta:,.2f} zł")
+    col1.metric(label="📥 Deposits (PLN)", value=f"{total_dep:,.2f} zł")
+    col2.metric(label="📤 Withdrawals (PLN)", value=f"{total_with:,.2f} zł")
+    col3.metric(label="💰 Balance (PLN)", value=f"{current_bal:,.2f} zł", delta=f"{delta:,.2f} zł")
     
     st.caption("Equivalent in USD")
-    col1u, col2u, col3u = st.columns(3)
-    col1u.metric("Deposits (USD)", f"${dep_usd:,.2f}" if dep_usd is not None else "N/A")
-    col2u.metric("Withdrawals (USD)", f"${with_usd:,.2f}" if with_usd is not None else "N/A")
-    col3u.metric("Balance (USD)", f"${bal_usd:,.2f}" if bal_usd is not None else "N/A", delta=f"${delta_usd:,.2f}" if delta_usd is not None else "N/A")
+    col1_usd, col2_usd, col3_usd = st.columns(3)
+    col1_usd.metric(label="Deposits (USD)", value=f"${total_dep_usd:,.2f}" if total_dep_usd is not None else "N/A")
+    col2_usd.metric(label="Withdrawals (USD)", value=f"${total_with_usd:,.2f}" if total_with_usd is not None else "N/A")
+    col3_usd.metric(label="Balance (USD)", value=f"${current_bal_usd:,.2f}" if current_bal_usd is not None else "N/A", delta=f"${delta_usd:,.2f}" if delta_usd is not None else "N/A")
     st.divider()
 
 def render_table():
@@ -49,6 +53,7 @@ def render_table():
     df_with_balance = add_balance_column(df)
     
     st.subheader("📋 Transaction Register (PLN)")
+    
     editable_cols = ['Date', 'Deposit', 'Withdrawal']
     edited_df = st.data_editor(
         df[editable_cols],
@@ -71,27 +76,35 @@ def render_table():
         st.session_state.last_saved = edited_df.copy()
         st.rerun()
     
-    df_with_balance = add_balance_column(get_all_transactions())
+    # Refresh after save
+    df_updated = get_all_transactions()
+    df_with_balance = add_balance_column(df_updated)
     
     st.caption("⬇️ Full Register with Running Balance (PLN)")
     
     def color_balance(val):
         if isinstance(val, (int, float)):
-            if val > 0: return f'color: {COLORS["green"]}; font-weight: 700;'
-            elif val < 0: return f'color: {COLORS["red"]}; font-weight: 700;'
-            else: return f'color: {COLORS["text_muted"]};'
+            if val > 0:
+                return f'color: {COLORS["green"]}; font-weight: 700;'
+            elif val < 0:
+                return f'color: {COLORS["red"]}; font-weight: 700;'
+            else:
+                return f'color: {COLORS["text_muted"]};'
         return ''
     
     def color_deposit(val):
-        return f'color: {COLORS["green"]}; font-weight: 600;' if isinstance(val, (int, float)) and val > 0 else ''
+        if isinstance(val, (int, float)) and val > 0:
+            return f'color: {COLORS["green"]}; font-weight: 600;'
+        return ''
     
     def color_withdrawal(val):
-        return f'color: {COLORS["red"]}; font-weight: 600;' if isinstance(val, (int, float)) and val > 0 else ''
+        if isinstance(val, (int, float)) and val > 0:
+            return f'color: {COLORS["red"]}; font-weight: 600;'
+        return ''
     
-    styled_df = (df_with_balance.style
-        .applymap(color_balance, subset=['Balance'])
-        .applymap(color_deposit, subset=['Deposit'])
-        .applymap(color_withdrawal, subset=['Withdrawal']))
+    styled_df = df_with_balance.style.applymap(color_balance, subset=['Balance'])
+    styled_df = styled_df.applymap(color_deposit, subset=['Deposit'])
+    styled_df = styled_df.applymap(color_withdrawal, subset=['Withdrawal'])
     
     st.dataframe(
         styled_df,
@@ -105,4 +118,5 @@ def render_table():
         }
     )
     
+    # KPI Cards
     render_kpi(df_with_balance)

@@ -21,8 +21,12 @@ def render_quick_add():
                 if trans_amount <= 0:
                     st.error("Amount must be greater than 0.")
                 else:
-                    deposit = trans_amount if trans_type == "Income" else 0.0
-                    withdrawal = 0.0 if trans_type == "Income" else trans_amount
+                    if trans_type == "Income":
+                        deposit = trans_amount
+                        withdrawal = 0.0
+                    else:
+                        deposit = 0.0
+                        withdrawal = trans_amount
                     add_transaction(trans_date, deposit, withdrawal)
                     st.success(f"✅ Added {trans_type}: {trans_amount:.2f} PLN on {trans_date.strftime('%Y-%m-%d')}")
                     if 'last_saved' in st.session_state:

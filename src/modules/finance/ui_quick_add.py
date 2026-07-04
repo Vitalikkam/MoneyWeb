@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
-from src.supabase_client import add_transaction
+from src.modules.finance.data import add_transaction
+# Instead of: from src.data_manager import ...
 
 def render_quick_add():
     if not st.session_state.get('show_quick_add', False):
@@ -16,7 +17,7 @@ def render_quick_add():
             with col3:
                 trans_type = st.selectbox("Type", ["Expense", "Income"])
             
-            submitted = st.form_submit_button("➕ Add Transaction", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("➕ Add Transaction", type="primary", width='stretch')
             if submitted:
                 if trans_amount <= 0:
                     st.error("Amount must be greater than 0.")

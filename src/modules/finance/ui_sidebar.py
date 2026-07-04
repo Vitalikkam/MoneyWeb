@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from src.currency import get_current_rate, fetch_exchange_rate
-from src.supabase_client import append_csv_data, export_to_csv, clear_all_data
+from src.modules.finance.csv_utils import append_csv_data, export_to_csv
+from src.modules.finance.data import clear_all_data
 import logging
+from src.modules.finance.data import get_summary, clear_all_data
 
 # Capture logs for display
 log_messages = []
@@ -51,7 +53,7 @@ def render_sidebar():
         # Refresh button with debug info
         col1, col2 = st.columns([3, 1])
         with col1:
-            if st.button("🔄 Refresh Exchange Rate", use_container_width=True):
+            if st.button("🔄 Refresh Exchange Rate", width='stretch'):
                 if 'rate_fetched_at' in st.session_state:
                     del st.session_state.rate_fetched_at
                 # Force fresh fetch
@@ -64,7 +66,7 @@ def render_sidebar():
                     st.error("❌ Failed to fetch rate")
                 st.rerun()
         with col2:
-            if st.button("📋", use_container_width=True):
+            if st.button("📋", width='stretch'):
                 st.session_state.show_log = not st.session_state.get('show_log', False)
         
         # Show debug log if enabled

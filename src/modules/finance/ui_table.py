@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from src.supabase_client import get_all_transactions, save_dataframe
-from src.config import COLORS
-from src.currency import convert_pln_to_usd
+from src.modules.finance.data import get_all_transactions, save_dataframe
+from src.shared.config import COLORS
+from src.shared.currency import convert_pln_to_usd
 
 def add_balance_column(df):
     df = df.copy()
@@ -55,23 +55,35 @@ def render_table():
     st.subheader("📋 Transaction Register (PLN)")
     
     editable_cols = ['Date', 'Deposit', 'Withdrawal']
+    
+    # Create a copy of the df for editing
+    df_edit = df[editable_cols].copy()
+    
     edited_df = st.data_editor(
-        df[editable_cols],
-        use_container_width=True,
+        df_edit,
+        width='stretch',
         hide_index=True,
         column_config={
-            "Date": st.column_config.DateColumn("Date", format="MMM DD, YYYY"),
+            "Date": st.column_config.Column("Date"),
             "Deposit": st.column_config.NumberColumn("Deposit (+ PLN)", format="%.2f", min_value=0),
             "Withdrawal": st.column_config.NumberColumn("Withdrawal (- PLN)", format="%.2f", min_value=0)
         },
-        num_rows="dynamic"
+        num_rows="dynamic",
+        key=f"data_editor_{len(df)}"  # Add key to prevent caching issues
     )
     
-    edited_df['Date'] = pd.to_datetime(edited_df['Date']).dt.date
+    # Convert Date to datetime
+    if not edited_df.empty:
+        edited_df['Date'] = pd.to_datetime(edited_df['Date']).dt.date
+    
+    # Initialize last_saved if not exists
     if 'last_saved' not in st.session_state:
         st.session_state.last_saved = df[editable_cols].copy()
+        st.session_state.last_saved['Date'] = pd.to_datetime(st.session_state.last_saved['Date']).dt.date
     
+    # Check if changes were made
     if not edited_df.equals(st.session_state.last_saved):
+        # Save the changes
         save_dataframe(edited_df)
         st.session_state.last_saved = edited_df.copy()
         st.rerun()
@@ -108,10 +120,10 @@ def render_table():
     
     st.dataframe(
         styled_df,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
-            "Date": st.column_config.DateColumn("Date", format="MMM DD, YYYY"),
+            "Date": st.column_config.Column("Date"),
             "Deposit": st.column_config.NumberColumn("Deposit (+)", format="%.2f"),
             "Withdrawal": st.column_config.NumberColumn("Withdrawal (-)", format="%.2f"),
             "Balance": st.column_config.NumberColumn("💰 Balance", format="%.2f")

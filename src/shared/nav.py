@@ -17,7 +17,8 @@ def render_nav():
         'home': {'icon': '🏠', 'label': 'Home'},
         'finance': {'icon': '💰', 'label': 'Finance'},
         'food': {'icon': '🍽️', 'label': 'Food'},
-        'insights': {'icon': '📊', 'label': 'Insights'},
+        'supplements': {'icon': '💊', 'label': 'Supplements'},
+        'vocabulary': {'icon': '📚', 'label': 'Vocabulary'},
     }
     
     # Create the nav bar with columns
@@ -33,7 +34,7 @@ def render_nav():
             if st.button(
                 button_label,
                 key=f"nav_{page_id}",
-                use_container_width=True,
+                width='stretch',
                 type="primary" if is_active else "secondary"
             ):
                 if not is_active:

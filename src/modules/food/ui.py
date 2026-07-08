@@ -95,10 +95,10 @@ def render_api_form():
     
     col1, col2 = st.columns([1, 4])
     with col1:
-        search_btn = st.button("🔍 Search", type="primary", use_container_width=True)
+        search_btn = st.button("🔍 Search", type="primary", width='stretch')
     
     with col2:
-        if st.button("🔄 Clear Preview", use_container_width=True):
+        if st.button("🔄 Clear Preview", width='stretch'):
             st.session_state.api_preview = None
             st.rerun()
     

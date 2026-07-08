@@ -112,7 +112,7 @@ if current_page == 'home':
             fig = create_river_chart(df_balance)
             if fig:
                 fig.update_layout(height=200, yaxis_title="PLN", showlegend=False)
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig, config={'displayModeBar': False})
     
     # === FOOD COLUMN ===
     with col2:
@@ -322,6 +322,15 @@ elif current_page == 'food':
     # --- Food Page ---
     from src.modules.food.ui import render_food_tracker
     render_food_tracker()
+
+elif current_page == 'supplements':
+    # --- Supplements Page ---
+    from src.modules.supplements.ui import render_supplement_tracker
+    render_supplement_tracker()
+
+elif current_page == 'vocabulary':
+    from src.modules.vocabulary.ui import render_vocabulary_tracker
+    render_vocabulary_tracker()
 
 elif current_page == 'insights':
     # --- Insights Page (Coming Soon) ---

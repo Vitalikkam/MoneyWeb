@@ -38,7 +38,7 @@ class SQLiteClient:
             )
         ''')
         
-        # Food entries table with vitamins and minerals
+        # Food entries table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS food_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,8 +61,41 @@ class SQLiteClient:
             )
         ''')
         
+        # Supplements table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS supplements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Date TEXT NOT NULL,
+                supplement_name TEXT NOT NULL,
+                dosage REAL DEFAULT 0,
+                unit TEXT DEFAULT 'mg',
+                taken BOOLEAN DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Vocabulary table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS vocabulary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT NOT NULL UNIQUE,
+                cefr_level TEXT,
+                definition TEXT,
+                example_sentence TEXT,
+                importance INTEGER DEFAULT 3,
+                mastery INTEGER DEFAULT 4,
+                category TEXT,
+                date_added TEXT,
+                last_reviewed TEXT,
+                times_reviewed INTEGER DEFAULT 0,
+                next_review_date TEXT
+            )
+        ''')
+        
         conn.commit()
         conn.close()
+    
+    # --- Transaction methods ---
     
     def get_transactions(self, start_date=None, end_date=None):
         import sqlite3
@@ -110,6 +143,8 @@ class SQLiteClient:
         conn.close()
         return cursor.rowcount > 0
     
+    # --- Food entry methods ---
+    
     def get_food_entries(self, date=None):
         import sqlite3
         import pandas as pd
@@ -143,6 +178,78 @@ class SQLiteClient:
         conn.commit()
         conn.close()
         return cursor.lastrowid
+    
+    # --- Supplement methods ---
+    
+    def get_supplements(self, start_date=None, end_date=None):
+        """Get supplements for a date range."""
+        import sqlite3
+        import pandas as pd
+        conn = self._get_connection()
+        
+        query = "SELECT * FROM supplements"
+        params = []
+        
+        if start_date and end_date:
+            query += " WHERE Date BETWEEN ? AND ?"
+            params = [start_date, end_date]
+        elif start_date:
+            query += " WHERE Date = ?"
+            params = [start_date]
+        
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        return df
+    
+    def add_supplement(self, date, supplement_name, dosage, unit):
+        """Add a supplement entry."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO supplements (Date, supplement_name, dosage, unit)
+            VALUES (?, ?, ?, ?)
+        ''', (date, supplement_name, dosage, unit))
+        conn.commit()
+        conn.close()
+        return cursor.lastrowid
+    
+    def set_supplement_taken(self, date, supplement_name, dosage, unit, taken):
+        """Set supplement taken status (insert or update)."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        # Check if entry exists
+        cursor.execute(
+            "SELECT id FROM supplements WHERE Date = ? AND supplement_name = ?",
+            (date, supplement_name)
+        )
+        result = cursor.fetchone()
+        
+        if result:
+            # Update existing
+            cursor.execute(
+                "UPDATE supplements SET taken = ?, dosage = ?, unit = ? WHERE Date = ? AND supplement_name = ?",
+                (taken, dosage, unit, date, supplement_name)
+            )
+        else:
+            # Insert new
+            cursor.execute('''
+                INSERT INTO supplements (Date, supplement_name, dosage, unit, taken)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (date, supplement_name, dosage, unit, taken))
+        
+        conn.commit()
+        conn.close()
+        return True
+    
+    def delete_supplement(self, id):
+        """Delete a supplement entry by ID."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM supplements WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
 
 def get_database():
     """Get the appropriate database client based on environment."""

@@ -149,3 +149,99 @@ class SQLiteClient(DatabaseInterface):
         conn.commit()
         conn.close()
         return cursor.lastrowid
+
+    def get_supplements(self, start_date=None, end_date=None):
+        """Get supplements for a date range."""
+        import sqlite3
+        import pandas as pd
+        conn = self._get_connection()
+        
+        query = "SELECT * FROM supplements"
+        params = []
+        
+        if start_date and end_date:
+            query += " WHERE Date BETWEEN ? AND ?"
+            params = [start_date, end_date]
+        elif start_date:
+            query += " WHERE Date = ?"
+            params = [start_date]
+        
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        return df
+
+    def add_supplement(self, date, supplement_name, dosage, unit):
+        """Add a supplement entry."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO supplements (Date, supplement_name, dosage, unit)
+            VALUES (?, ?, ?, ?)
+        ''', (date, supplement_name, dosage, unit))
+        conn.commit()
+        conn.close()
+        return cursor.lastrowid
+
+    def update_supplement_taken(self, date, supplement_name, taken):
+        """Update whether a supplement was taken on a specific date."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        # Check if entry exists
+        cursor.execute(
+            "SELECT id FROM supplements WHERE Date = ? AND supplement_name = ?",
+            (date, supplement_name)
+        )
+        result = cursor.fetchone()
+        
+        if result:
+            # Update existing
+            cursor.execute(
+                "UPDATE supplements SET taken = ? WHERE Date = ? AND supplement_name = ?",
+                (taken, date, supplement_name)
+            )
+        else:
+            # Insert new
+            return None
+        
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+
+    def set_supplement_taken(self, date, supplement_name, dosage, unit, taken):
+        """Set supplement taken status (insert or update)."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        # Check if entry exists
+        cursor.execute(
+            "SELECT id FROM supplements WHERE Date = ? AND supplement_name = ?",
+            (date, supplement_name)
+        )
+        result = cursor.fetchone()
+        
+        if result:
+            # Update existing
+            cursor.execute(
+                "UPDATE supplements SET taken = ?, dosage = ?, unit = ? WHERE Date = ? AND supplement_name = ?",
+                (taken, dosage, unit, date, supplement_name)
+            )
+        else:
+            # Insert new
+            cursor.execute('''
+                INSERT INTO supplements (Date, supplement_name, dosage, unit, taken)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (date, supplement_name, dosage, unit, taken))
+        
+        conn.commit()
+        conn.close()
+        return True
+
+    def delete_supplement(self, id):
+        """Delete a supplement entry by ID."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM supplements WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0

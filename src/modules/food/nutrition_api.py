@@ -1,10 +1,11 @@
 """
-Nutrition API client with manual fallback.
+Nutrition API client with Redis caching.
 """
 
 import requests
 import streamlit as st
 import json
+from src.cache import get_cache
 
 class NutritionAPI:
     def __init__(self):
@@ -20,6 +21,9 @@ class NutritionAPI:
             "Content-Type": "application/json"
         }
         
+        # Initialize cache
+        self.cache = get_cache()
+        
         if self.api_key:
             print(f"🔑 API Key found: {self.api_key[:4]}...")
         else:
@@ -28,26 +32,42 @@ class NutritionAPI:
     def analyze_food(self, query):
         """
         Analyze a food query using Nutrition Tracker API.
+        Checks cache first, then calls API.
         """
         if not self.api_key:
             st.error("❌ No API key found. Please add RAPIDAPI_KEY to secrets.")
             return None
         
-        result = self._try_endpoint("/v1/calculate/natural", query)
-        if result:
-            return result
+        # Check cache first
+        cached = self.cache.get_food(query)
+        if cached:
+            print(f"📦 Returning cached result for: {query}")
+            return cached
         
-        st.error("❌ Could not analyze food. Please try manual entry.")
-        return None
+        # Not in cache, call API
+        print(f"🌐 Calling API for: {query}")
+        result = self._call_api(query)
+        
+        if result and result.get('success'):
+            # Only cache if data looks valid (carbs > 0 or calories > 0)
+            if result.get('carbs', 0) > 0 or result.get('calories', 0) > 0:
+                self.cache.set_food(query, result)
+                print(f"💾 Cached result for: {query}")
+            else:
+                print(f"⚠️ Not caching result for: {query} (no valid data)")
+        else:
+            print(f"❌ API call failed for: {query}")
+        
+        return result
     
-    def _try_endpoint(self, endpoint, query):
-        """Try a specific endpoint."""
+    def _call_api(self, query):
+        """Call the actual API endpoint."""
         try:
-            url = f"{self.base_url}{endpoint}"
+            url = f"{self.base_url}/v1/calculate/natural"
             payload = {"text": query}
             
-            print(f"📤 Trying endpoint: {endpoint}")
-            print(f"📤 Payload: {payload}")
+            print(f"📤 Sending request to: {url}")
+            print(f"📤 Query: {query}")
             
             response = requests.post(
                 url,
@@ -60,15 +80,21 @@ class NutritionAPI:
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ Success with {endpoint}!")
-                return self._parse_response(data)
+                print(f"✅ Success!")
+                result = self._parse_response(data)
+                
+                # If carbs are 0 but calories > 0, still return the result
+                # but don't cache it (handled in analyze_food)
+                if result and result.get('carbs', 0) == 0 and result.get('calories', 0) > 0:
+                    print(f"⚠️ Warning: Carbs = 0 but calories > 0. Not caching.")
+                
+                return result
             else:
-                print(f"❌ {endpoint} failed: {response.status_code}")
-                print(f"❌ Response: {response.text[:200]}")
+                print(f"❌ Error: {response.status_code} - {response.text[:200]}")
                 return None
                 
         except Exception as e:
-            print(f"❌ {endpoint} error: {e}")
+            print(f"❌ Exception: {e}")
             return None
     
     def _parse_response(self, data):
@@ -90,12 +116,10 @@ class NutritionAPI:
             elif 'totalNutrients' in data:
                 total_nutrients = data['totalNutrients']
             else:
-                # Try to find nutrients in the data
                 for key, value in data.items():
                     if isinstance(value, dict) and 'value' in value:
                         total_nutrients[key] = value
             
-            # Debug: Print available nutrients
             nutrient_names = list(total_nutrients.keys())
             print(f"📊 Available nutrients: {nutrient_names}")
             
@@ -105,16 +129,13 @@ class NutritionAPI:
                     return nutrient.get('value', 0)
                 return float(nutrient) if nutrient else 0
             
-            # Try multiple names for carbs
+            # Priority list for carbs
             carb_names = [
-                'Carbohydrates',
                 'Carbohydrate, by difference',
-                'Carbohydrate',
+                'Carbohydrates',
                 'Total Carbohydrate',
                 'Total Carbohydrates',
-                'Carbs',
-                'carbohydrate',
-                'Carbohydrates'
+                'Carbohydrate',
             ]
             
             carbs = 0
@@ -127,43 +148,30 @@ class NutritionAPI:
             if carbs == 0:
                 print(f"⚠️ Carbs not found. Available: {nutrient_names[:10]}")
             
-            # Try alternative names for protein
-            protein_names = ['Protein', 'protein']
-            protein = 0
-            for name in protein_names:
-                protein = get_nutrient(name)
-                if protein > 0:
-                    print(f"✅ Found protein under '{name}': {protein}")
-                    break
-            
-            # Try alternative names for fat
-            fat_names = ['Fat', 'Total lipid (fat)', 'fat']
-            fat = 0
-            for name in fat_names:
-                fat = get_nutrient(name)
-                if fat > 0:
-                    print(f"✅ Found fat under '{name}': {fat}")
-                    break
+            # Try to calculate carbs from calories if missing
+            if carbs == 0:
+                energy = get_nutrient('Energy')
+                protein = get_nutrient('Protein')
+                fat = get_nutrient('Fat')
+                if energy > 0:
+                    estimated = (energy - protein*4 - fat*9) / 4
+                    if estimated > 0:
+                        carbs = estimated
+                        print(f"🔢 Estimated carbs: {carbs:.1f}g")
             
             result = {
-                # Macros
                 "calories": get_nutrient('Energy'),
-                "protein": protein,
+                "protein": get_nutrient('Protein'),
                 "carbs": carbs,
-                "fat": fat,
-                
-                # Vitamins
+                "fat": get_nutrient('Fat'),
                 "vitamin_a": get_nutrient('Vitamin A, RAE'),
                 "vitamin_d": get_nutrient('Vitamin D (D2 + D3)'),
                 "vitamin_c": get_nutrient('Vitamin C, total ascorbic acid'),
-                
-                # Minerals
                 "calcium": get_nutrient('Calcium, Ca'),
                 "iron": get_nutrient('Iron, Fe'),
                 "magnesium": get_nutrient('Magnesium, Mg'),
                 "potassium": get_nutrient('Potassium, K'),
                 "zinc": get_nutrient('Zinc, Zn'),
-                
                 "success": True,
                 "raw": total_nutrients
             }
@@ -174,3 +182,16 @@ class NutritionAPI:
         except Exception as e:
             print(f"❌ Parse error: {e}")
             return None
+    
+    def invalidate_cache(self, query):
+        """Delete a specific cache entry."""
+        if self.cache.enabled:
+            key = self.cache._get_key(query)
+            try:
+                self.cache.redis.delete(key)
+                print(f"🗑️ Invalidated cache for: {query}")
+                return True
+            except Exception as e:
+                print(f"⚠️ Failed to invalidate cache: {e}")
+                return False
+        return False

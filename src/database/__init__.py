@@ -82,6 +82,7 @@ class SQLiteClient:
                 cefr_level TEXT,
                 definition TEXT,
                 example_sentence TEXT,
+                translation TEXT,
                 importance INTEGER DEFAULT 3,
                 mastery INTEGER DEFAULT 4,
                 category TEXT,
@@ -250,6 +251,96 @@ class SQLiteClient:
         conn.commit()
         conn.close()
         return cursor.rowcount > 0
+
+    # --- Food entry delete ---
+
+    def delete_food_entry(self, id):
+        """Delete a food entry by ID."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM food_entries WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+
+    # --- Vocabulary methods ---
+
+    def get_vocabulary(self):
+        """Get all vocabulary words."""
+        import pandas as pd
+        conn = self._get_connection()
+        df = pd.read_sql_query("SELECT * FROM vocabulary ORDER BY word", conn)
+        conn.close()
+        return df
+
+    def add_vocabulary(self, word, cefr_level, definition, example,
+                       translation=None, importance=3, category='general', mastery=4):
+        """Add a new vocabulary word."""
+        from datetime import datetime, timedelta
+        today = datetime.today().strftime('%Y-%m-%d')
+        next_review = (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d')
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO vocabulary (
+                    word, cefr_level, definition, example_sentence, translation,
+                    importance, category, mastery, date_added, last_reviewed, next_review_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (word, cefr_level, definition, example, translation,
+                  importance, category, mastery, today, today, next_review))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            conn.close()
+            print(f"Error adding vocabulary: {e}")
+            return False
+
+    def update_vocabulary_review(self, word, mastery, next_review_date):
+        """Update review status for a word."""
+        from datetime import datetime
+        today = datetime.today().strftime('%Y-%m-%d')
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE vocabulary
+            SET mastery = ?, last_reviewed = ?, next_review_date = ?,
+                times_reviewed = times_reviewed + 1
+            WHERE word = ?
+        ''', (mastery, today, next_review_date, word))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+
+    def delete_vocabulary(self, word):
+        """Delete a vocabulary word."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM vocabulary WHERE word = ?", (word,))
+        conn.commit()
+        conn.close()
+        return cursor.rowcount > 0
+
+    def word_exists(self, word):
+        """Check if a word already exists."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM vocabulary WHERE word = ?", (word,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+
+    def get_vocabulary_due(self, date):
+        """Get vocabulary words due for review on or before a date."""
+        import pandas as pd
+        conn = self._get_connection()
+        df = pd.read_sql_query(
+            "SELECT * FROM vocabulary WHERE next_review_date <= ? ORDER BY next_review_date",
+            conn, params=[date]
+        )
+        conn.close()
+        return df
 
 def get_database():
     """Get the appropriate database client based on environment."""

@@ -19,6 +19,7 @@ from .data import (
 from .api import VocabularyAPI
 from .config import get_cefr_level, get_word_count_by_level
 from .images import ImageAPI
+from .translation import TranslationService
 
 def render_vocabulary_tracker():
     """Main vocabulary tracker interface."""
@@ -51,22 +52,23 @@ def render_vocabulary_tracker():
 def render_suggestion_tab(api):
     """Render the word suggestion tab."""
     st.subheader("🎯 Discover New Words")
-    
+
     # Show word count info
     counts = get_word_count_by_level()
     st.caption(f"📚 Available words: {counts['C1']} C1 + {counts['C2']} C2 = {counts['C1'] + counts['C2']} total")
-    
-    # Initialize session state for suggestion
-    if 'current_suggestion' not in st.session_state:
+
+    # Only auto-fetch once per session — not on every tab revisit
+    if 'suggestion_loaded' not in st.session_state:
+        st.session_state.suggestion_loaded = False
         st.session_state.current_suggestion = None
-    
-    # Get a new suggestion if none exists
-    if st.session_state.current_suggestion is None:
+
+    if not st.session_state.suggestion_loaded and st.session_state.current_suggestion is None:
         with st.spinner("Finding a new word..."):
             suggestion = api.get_random_suggestion()
             if suggestion and suggestion.get('found'):
                 st.session_state.current_suggestion = suggestion
-    
+                st.session_state.suggestion_loaded = True
+
     # Buttons row
     col1, col2, col3 = st.columns([1, 1, 3])
     with col1:
@@ -75,97 +77,145 @@ def render_suggestion_tab(api):
                 suggestion = api.get_random_suggestion()
                 if suggestion and suggestion.get('found'):
                     st.session_state.current_suggestion = suggestion
+                    st.session_state.suggestion_loaded = True
                     st.rerun()
                 else:
                     st.warning("Could not fetch a new word. Please try again.")
-    
+
     with col2:
         if st.button("📚 Add Own", use_container_width=True):
             st.session_state.show_add_own = not st.session_state.get('show_add_own', False)
             st.rerun()
-    
+
     # Manual add own word
     if st.session_state.get('show_add_own', False):
         render_add_own_form()
-    
+
     # Display current suggestion as a card
     if st.session_state.current_suggestion:
         render_word_card(st.session_state.current_suggestion)
     else:
-        st.info("Click 'New Word' to discover C1-C2 vocabulary!")
+        st.info("Click '🔄 New Word' to discover C1-C2 vocabulary!")
 
 def render_add_own_form():
-    """Render the add own word form with translation."""
-    with st.container():
-        st.markdown("---")
-        st.subheader("✏️ Add Your Own Word")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            own_word = st.text_input("Word", placeholder="Enter a word...")
-            own_level = st.selectbox("CEFR Level", ["B2", "C1", "C2", "Unknown"])
-        with col2:
-            own_translation = st.text_input("Russian Translation (optional)", placeholder="e.g., глубокий")
-            own_definition = st.text_area("Definition", placeholder="Enter the definition...")
-            own_example = st.text_area("Example (optional)", placeholder="Enter an example sentence...")
-        
-        # Auto-translate button
-        if own_word and not own_translation:
-            if st.button("🔄 Auto-translate to Russian", use_container_width=True):
-                from .translation import TranslationService
-                translator = TranslationService()
-                with st.spinner("Translating..."):
-                    translation = translator.translate_to_russian(own_word)
-                    if translation:
-                        st.session_state.auto_translation = translation
-                        st.rerun()
-                    else:
-                        st.warning("Could not auto-translate. Please enter manually.")
-        
-        # Show auto-translation if available
-        if st.session_state.get('auto_translation'):
-            st.info(f"💡 Translation: {st.session_state.auto_translation}")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ Use this translation", use_container_width=True):
-                    st.session_state.manual_translation = st.session_state.auto_translation
-                    st.session_state.auto_translation = None
-                    st.rerun()
-            with col2:
-                if st.button("❌ Try again", use_container_width=True):
-                    st.session_state.auto_translation = None
-                    st.rerun()
-        
-        # Use manual translation if set
-        translation_value = st.session_state.get('manual_translation', own_translation)
-        
-        if st.button("💾 Add to Vocabulary", type="primary"):
-            if own_word and own_definition:
-                word = own_word.lower().strip()
-                if word_exists(word):
-                    st.warning(f"'{word}' is already in your vocabulary!")
-                else:
-                    level = own_level if own_level != "Unknown" else None
-                    if add_vocabulary(
-                        word=word,
-                        cefr_level=level,
-                        definition=own_definition,
-                        example=own_example,
-                        translation=translation_value if translation_value else None,
-                        importance=3,
-                        category="manual",
-                        mastery=3
-                    ):
-                        st.success(f"✅ Added '{word}' to your vocabulary!")
-                        st.session_state.show_add_own = False
-                        st.session_state.auto_translation = None
-                        st.session_state.manual_translation = None
-                        st.rerun()
-                    else:
-                        st.error("Failed to add word.")
+    """Render the add own word form with fetch-first flow."""
+
+    # Session state keys used by this form
+    OWN_FETCHED  = 'add_own_fetched'   # dict of fetched word data
+    OWN_WORD_KEY = 'add_own_last_word' # word that was last fetched
+
+    st.markdown("---")
+    st.subheader("✏️ Add Your Own Word")
+
+    # --- Word input + Fetch button ---
+    col_word, col_btn = st.columns([3, 1])
+    with col_word:
+        own_word = st.text_input("Word", placeholder="Enter a word...", key="add_own_word_input")
+    with col_btn:
+        st.markdown("<br>", unsafe_allow_html=True)  # align button with input
+        fetch_clicked = st.button("🔍 Fetch", use_container_width=True, key="add_own_fetch_btn")
+
+    # --- Fetch from API when button clicked ---
+    if fetch_clicked:
+        if own_word.strip():
+            # Clear stale fetched data if word changed
+            st.session_state[OWN_FETCHED] = None
+            st.session_state[OWN_WORD_KEY] = None
+            with st.spinner(f"Fetching data for '{own_word.strip()}'..."):
+                api = VocabularyAPI()
+                data = api.get_word_data(own_word.strip().lower())
+                # Translation is already inside data from VocabularyAPI
+                st.session_state[OWN_FETCHED] = data
+                st.session_state[OWN_WORD_KEY] = own_word.strip().lower()
+            st.rerun()
+        else:
+            st.warning("Enter a word first.")
+
+    # --- Pre-fill fields from fetched data if word matches ---
+    fetched = st.session_state.get(OWN_FETCHED)
+    last_word = st.session_state.get(OWN_WORD_KEY, '')
+    word_changed = own_word.strip().lower() != last_word
+
+    if fetched and not word_changed:
+        # Show fetch success notice
+        if fetched.get('found'):
+            st.success("✅ Found in dictionary — fields pre-filled. Edit anything before saving.")
+        else:
+            st.warning("⚠️ Word not found in dictionary — CEFR level and definition filled where available. Complete manually.")
+
+        prefill_phonetic = fetched.get('phonetic', '')
+
+        # Write fetched values directly into widget session state so Streamlit picks them up
+        st.session_state['add_own_definition']  = fetched.get('definition', '')
+        st.session_state['add_own_example']     = fetched.get('example', '')
+        st.session_state['add_own_translation'] = fetched.get('translation', '')
+
+        # Infer CEFR index for selectbox
+        level_options = ["B2", "C1", "C2", "Unknown"]
+        fetched_level = fetched.get('cefr_level')
+        level_index = level_options.index(fetched_level) if fetched_level in level_options else 3
+
+        # Clear fetched data so we don't overwrite user edits on next rerun
+        st.session_state[OWN_FETCHED] = None
+    else:
+        prefill_phonetic = ''
+        level_index      = 3  # default Unknown
+
+    # --- Editable fields (pre-filled when fetched) ---
+    col_left, col_right = st.columns(2)
+    with col_left:
+        own_level = st.selectbox(
+            "CEFR Level", ["B2", "C1", "C2", "Unknown"],
+            index=level_index, key="add_own_level"
+        )
+        own_translation = st.text_input(
+            "Russian Translation",
+            placeholder="e.g., глубокий",
+            key="add_own_translation"
+        )
+        if prefill_phonetic:
+            st.caption(f"🔊 {prefill_phonetic}")
+
+    with col_right:
+        own_definition = st.text_area(
+            "Definition",
+            placeholder="Enter or fetch the definition...",
+            key="add_own_definition"
+        )
+        own_example = st.text_area(
+            "Example (optional)",
+            placeholder="Enter or fetch an example sentence...",
+            key="add_own_example"
+        )
+
+    # --- Save button ---
+    if st.button("💾 Add to Vocabulary", type="primary", key="add_own_save_btn"):
+        word = own_word.strip().lower()
+        if not word or not own_definition.strip():
+            st.error("Word and definition are required.")
+        elif word_exists(word):
+            st.warning(f"'{word}' is already in your vocabulary!")
+        else:
+            level = own_level if own_level != "Unknown" else None
+            if add_vocabulary(
+                word=word,
+                cefr_level=level,
+                definition=own_definition.strip(),
+                example=own_example.strip(),
+                translation=own_translation.strip() if own_translation.strip() else None,
+                importance=3,
+                category="manual",
+                mastery=3
+            ):
+                st.success(f"✅ Added '{word}' to your vocabulary!")
+                # Clean up all form state
+                for key in [OWN_FETCHED, OWN_WORD_KEY, 'show_add_own']:
+                    st.session_state.pop(key, None)
+                st.rerun()
             else:
-                st.error("Please enter a word and definition.")
-        st.markdown("---")
+                st.error("Failed to add word.")
+
+    st.markdown("---")
 
 def render_word_card(word_data):
     """Render a word card using pure Streamlit components."""
@@ -361,26 +411,82 @@ def render_vocabulary_list():
     elif sort_by == "Mastery (High-Low)":
         filtered_df = filtered_df.sort_values('mastery', ascending=False)
     
-    # --- Display as cards ---
+    # --- Display as cards with pagination ---
     st.divider()
-    
+
+    PAGE_SIZE = 12
+    total_filtered = len(filtered_df)
+    total_pages = max(1, -(-total_filtered // PAGE_SIZE))  # ceil division
+
+    # Page selector
+    if total_pages > 1:
+        col_info, col_nav = st.columns([3, 2])
+        with col_info:
+            st.caption(f"Showing {total_filtered} words · Page {st.session_state.get('vocab_page', 1)} of {total_pages}")
+        with col_nav:
+            page = st.number_input(
+                "Page", min_value=1, max_value=total_pages,
+                value=st.session_state.get('vocab_page', 1),
+                step=1, key="vocab_page_input", label_visibility="collapsed"
+            )
+            st.session_state.vocab_page = page
+    else:
+        page = 1
+        st.caption(f"Showing {total_filtered} words")
+
+    start = (page - 1) * PAGE_SIZE
+    end = start + PAGE_SIZE
+    page_df = filtered_df.iloc[start:end]
+
     # Show words as cards (3 per row)
     cols_per_row = 3
-    rows = [filtered_df.iloc[i:i+cols_per_row] for i in range(0, len(filtered_df), cols_per_row)]
-    
+    rows = [page_df.iloc[i:i+cols_per_row] for i in range(0, len(page_df), cols_per_row)]
+
     for row in rows:
         cols = st.columns(cols_per_row)
         for idx, (_, word) in enumerate(row.iterrows()):
             with cols[idx]:
                 render_vocabulary_card(word)
-    
-    # --- Pagination (if too many words) ---
-    if len(filtered_df) > 30:
-        st.caption(f"Showing {len(filtered_df)} words. Use filters to narrow down.")
+
+    # Bottom page navigation
+    if total_pages > 1:
+        col_prev, col_mid, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.button("← Prev", disabled=(page <= 1), use_container_width=True, key="vocab_prev"):
+                st.session_state.vocab_page = page - 1
+                st.rerun()
+        with col_mid:
+            st.caption(f"Page {page} / {total_pages}", )
+        with col_next:
+            if st.button("Next →", disabled=(page >= total_pages), use_container_width=True, key="vocab_next"):
+                st.session_state.vocab_page = page + 1
+                st.rerun()
+
+def _format_last_reviewed(date_str):
+    """Format a date string as human-readable relative time."""
+    if not date_str or date_str == 'Never':
+        return 'Never reviewed'
+    try:
+        reviewed = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+        delta = (datetime.today() - reviewed).days
+        if delta == 0:
+            return 'Today'
+        elif delta == 1:
+            return 'Yesterday'
+        elif delta < 7:
+            return f'{delta} days ago'
+        elif delta < 30:
+            weeks = delta // 7
+            return f'{weeks} week{"s" if weeks > 1 else ""} ago'
+        else:
+            return reviewed.strftime('%b %d, %Y')
+    except Exception:
+        return str(date_str)
+
 
 def render_vocabulary_card(word):
     """Render a small card for a vocabulary word with translation."""
-    
+
     level_colors = {
         "C2": "#4ade80",
         "C1": "#60a5fa",
@@ -388,47 +494,47 @@ def render_vocabulary_card(word):
         None: "#94a3b8",
     }
     level_color = level_colors.get(word.get('cefr_level'), "#94a3b8")
-    
+
     mastery = word.get('mastery', 0)
     stars = "⭐" * mastery + "☆" * (5 - mastery) if mastery else "☆☆☆☆☆"
-    
+
     translation = word.get('translation', '')
     translation_html = f'<div style="color: #a78bfa; font-size: 14px;">🇷🇺 {translation}</div>' if translation else ''
-    
-    st.markdown(f"""
-    <div style="
-        background: #1e293b;
-        border: 1px solid #2a3a4b;
-        border-radius: 12px;
-        padding: 16px;
-        margin: 4px 0;
-        transition: all 0.2s;
-    ">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 18px; font-weight: 600; color: #f8fafc;">{word['word']}</span>
-            <span style="background: {level_color}; color: #0f172a; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                {word.get('cefr_level', '?')}
-            </span>
-        </div>
-        {translation_html}
-        <div style="color: #94a3b8; font-size: 13px; margin: 4px 0;">
-            {word.get('definition', 'No definition')[:80]}{'...' if len(word.get('definition', '')) > 80 else ''}
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-            <span style="color: #64748b; font-size: 12px;">{stars}</span>
-            <span style="color: #64748b; font-size: 11px;">{word.get('last_reviewed', 'Never')}</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
+
+    last_reviewed = _format_last_reviewed(word.get('last_reviewed'))
+
+    st.markdown(
+        f'<div style="background:#1e293b;border:1px solid #2a3a4b;border-radius:12px;padding:16px;margin:4px 0;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+        f'<span style="font-size:18px;font-weight:600;color:#f8fafc;">{word["word"]}</span>'
+        f'<span style="background:{level_color};color:#0f172a;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;">{word.get("cefr_level", "?")}</span>'
+        f'</div>'
+        f'{translation_html}'
+        f'<div style="color:#94a3b8;font-size:13px;margin:4px 0;">{word.get("definition", "No definition")[:80]}{"..." if len(word.get("definition", "")) > 80 else ""}</div>'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">'
+        f'<span style="color:#64748b;font-size:12px;">{stars}</span>'
+        f'<span style="color:#64748b;font-size:11px;">{last_reviewed}</span>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("🔊", key=f"audio_{word['word']}", help="Listen"):
-            # Will implement audio player here later
-            pass
+        if st.button("🔊", key=f"audio_{word['word']}", help="Listen to pronunciation"):
+            with st.spinner(""):
+                api = VocabularyAPI()
+                data = api.get_word_data(word['word'])
+                audio_url = data.get('audio_url')
+                if audio_url:
+                    st.audio(audio_url, format="audio/mpeg")
+                else:
+                    st.caption("No audio available")
     with col2:
         if st.button("🔄", key=f"review_{word['word']}", help="Review now"):
-            st.session_state.current_review_word = word['word']
+            st.session_state.current_page = 'vocabulary'
+            st.session_state.vocab_tab = 'review'
+            st.session_state.review_word_focus = word['word']
             st.rerun()
     with col3:
         if st.button("🗑️", key=f"delete_{word['word']}", help="Delete"):
@@ -439,86 +545,106 @@ def render_vocabulary_card(word):
 def render_review_tab():
     """Render the daily review tab."""
     st.subheader("🔄 Daily Review")
-    
+
     due_words = get_words_due_for_review()
-    
+
     if due_words.empty:
         st.success("🎉 No words due for review today! Great job!")
         return
-    
-    st.info(f"📚 You have {len(due_words)} word(s) due for review today.")
-    
+
+    total_due = len(due_words)
+    st.info(f"📚 You have {total_due} word(s) due for review today.")
+
     # Initialize review state
     if 'review_index' not in st.session_state:
         st.session_state.review_index = 0
-    
     if 'review_words' not in st.session_state:
         st.session_state.review_words = due_words.to_dict('records')
-    
+
+    # Reset if we've gone past the end
     if st.session_state.review_index >= len(st.session_state.review_words):
-        st.session_state.review_index = 0
-        st.session_state.review_words = due_words.to_dict('records')
-    
-    # Show current word
-    if st.session_state.review_words:
-        word_data = st.session_state.review_words[st.session_state.review_index]
-        
-        st.markdown("---")
-        st.markdown(f"### Word: **{word_data['word']}**")
-        st.markdown(f"**Definition:** {word_data.get('definition', 'No definition')}")
-        st.markdown(f"**Example:** *{word_data.get('example_sentence', 'No example')}*")
-        st.markdown(f"**Level:** {word_data.get('cefr_level', 'Unknown')}")
-        
-        # Mastery rating
-        st.markdown("---")
-        st.caption("How well do you know this word?")
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            if st.button("1️⃣", use_container_width=True):
-                update_review(word_data['word'], 1)
-                st.session_state.review_index += 1
-                st.rerun()
-            st.caption("Mastered")
-        
-        with col2:
-            if st.button("2️⃣", use_container_width=True):
-                update_review(word_data['word'], 2)
-                st.session_state.review_index += 1
-                st.rerun()
-            st.caption("Good")
-        
-        with col3:
-            if st.button("3️⃣", use_container_width=True):
-                update_review(word_data['word'], 3)
-                st.session_state.review_index += 1
-                st.rerun()
-            st.caption("Okay")
-        
-        with col4:
-            if st.button("4️⃣", use_container_width=True):
-                update_review(word_data['word'], 4)
-                st.session_state.review_index += 1
-                st.rerun()
-            st.caption("Struggling")
-        
-        with col5:
-            if st.button("5️⃣", use_container_width=True):
-                update_review(word_data['word'], 5)
-                st.session_state.review_index += 1
-                st.rerun()
-            st.caption("New")
-        
-        st.progress(
-            st.session_state.review_index / len(st.session_state.review_words),
-            text=f"Progress: {st.session_state.review_index + 1}/{len(st.session_state.review_words)}"
-        )
-        
-        if st.button("🔄 Reset Review Session"):
+        st.balloons()
+        st.success("🎉 You've reviewed all due words! Great session.")
+        if st.button("🔄 Start Over"):
             st.session_state.review_index = 0
             st.session_state.review_words = due_words.to_dict('records')
             st.rerun()
+        return
+
+    word_data = st.session_state.review_words[st.session_state.review_index]
+    current = st.session_state.review_index + 1
+    total = len(st.session_state.review_words)
+
+    # Progress bar — current/total, no off-by-one
+    st.progress(current / total, text=f"Word {current} of {total}")
+
+    st.markdown("---")
+
+    # Word card
+    col_word, col_meta = st.columns([3, 1])
+    with col_word:
+        st.markdown(f"## {word_data['word']}")
+        if word_data.get('translation'):
+            st.markdown(f"🇷🇺 *{word_data['translation']}*")
+    with col_meta:
+        level = word_data.get('cefr_level', '')
+        if level:
+            st.markdown(f"<div style='text-align:right;margin-top:8px;'><span style='background:#2a3a4b;color:#4ade80;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:600;'>{level}</span></div>", unsafe_allow_html=True)
+
+    if word_data.get('definition'):
+        st.markdown(f"**Definition:** {word_data['definition']}")
+
+    # DB column is example_sentence
+    example = word_data.get('example_sentence') or word_data.get('example', '')
+    if example:
+        st.markdown(f"**Example:** *{example}*")
+
+    # Mastery rating — 1 = New (worst), 5 = Mastered (best)
+    st.markdown("---")
+    st.caption("How well do you know this word?")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        if st.button("1️⃣\nNew", use_container_width=True, key="review_1"):
+            update_review(word_data['word'], 1)
+            st.session_state.review_index += 1
+            st.rerun()
+        st.caption("🔴 New")
+
+    with col2:
+        if st.button("2️⃣", use_container_width=True, key="review_2"):
+            update_review(word_data['word'], 2)
+            st.session_state.review_index += 1
+            st.rerun()
+        st.caption("🟠 Struggling")
+
+    with col3:
+        if st.button("3️⃣", use_container_width=True, key="review_3"):
+            update_review(word_data['word'], 3)
+            st.session_state.review_index += 1
+            st.rerun()
+        st.caption("🟡 Okay")
+
+    with col4:
+        if st.button("4️⃣", use_container_width=True, key="review_4"):
+            update_review(word_data['word'], 4)
+            st.session_state.review_index += 1
+            st.rerun()
+        st.caption("🟢 Good")
+
+    with col5:
+        if st.button("5️⃣", use_container_width=True, key="review_5"):
+            update_review(word_data['word'], 5)
+            st.session_state.review_index += 1
+            st.rerun()
+        st.caption("⭐ Mastered")
+
+    st.markdown("---")
+    if st.button("🔄 Reset Review Session", key="review_reset"):
+        st.session_state.review_index = 0
+        st.session_state.review_words = due_words.to_dict('records')
+        st.rerun()
 
 def render_stats_tab():
     """Render vocabulary statistics."""

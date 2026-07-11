@@ -6,8 +6,8 @@ from src.database import db
 import pandas as pd
 from datetime import datetime, timedelta
 
-def add_vocabulary(word, cefr_level, definition, example, importance=3, category="general", mastery=4):
-    """Add a new vocabulary word."""
+def add_vocabulary(word, cefr_level, definition, example, translation=None, importance=3, category="general", mastery=4):
+    """Add a new vocabulary word with optional translation."""
     try:
         conn = db._get_connection()
         cursor = conn.cursor()
@@ -16,10 +16,10 @@ def add_vocabulary(word, cefr_level, definition, example, importance=3, category
         
         cursor.execute('''
             INSERT INTO vocabulary (
-                word, cefr_level, definition, example_sentence,
+                word, cefr_level, definition, example_sentence, translation,
                 importance, category, mastery, date_added, last_reviewed, next_review_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (word, cefr_level, definition, example, importance, category, mastery, today, today, next_review))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (word, cefr_level, definition, example, translation, importance, category, mastery, today, today, next_review))
         
         conn.commit()
         conn.close()
@@ -27,6 +27,7 @@ def add_vocabulary(word, cefr_level, definition, example, importance=3, category
     except Exception as e:
         print(f"Error adding vocabulary: {e}")
         return False
+
 
 def get_all_vocabulary():
     """Get all vocabulary words."""

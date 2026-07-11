@@ -5,22 +5,30 @@ Vocabulary API using Free Dictionary API + Oxford 5000 word list.
 import requests
 import streamlit as st
 from .config import get_cefr_level, get_random_word_by_level
+from .translation import TranslationService
 
 class VocabularyAPI:
     def __init__(self):
         self.dict_api = "https://api.dictionaryapi.dev/api/v2/entries/en/"
+        self.translator = TranslationService()
     
     def get_word_data(self, word):
-        """Get CEFR level (from Oxford) + definition + example + audio (from API)."""
+        """Get CEFR level + definition + example + audio + translation."""
         word = word.lower().strip()
         
-        # Step 1: Get CEFR level from Oxford list
         cefr_level = get_cefr_level(word)
-        
-        # Step 2: Get definition, example, and audio from Free Dictionary API
         api_data = self._get_from_dictionary_api(word)
         
-        # Step 3: Combine results
+        # Get translation with better error handling
+        translation = None
+        try:
+            from .translation import TranslationService
+            translator = TranslationService()
+            translation = translator.translate_to_russian(word)
+            print(f"🔍 Translation for '{word}': {translation}")
+        except Exception as e:
+            print(f"Translation error for '{word}': {e}")
+        
         if api_data:
             return {
                 "word": word,
@@ -30,6 +38,7 @@ class VocabularyAPI:
                 "part_of_speech": api_data.get("part_of_speech", ""),
                 "audio_url": api_data.get("audio_url", ""),
                 "phonetic": api_data.get("phonetic", ""),
+                "translation": translation,
                 "found": True,
                 "source": "dictionaryapi"
             }
@@ -42,9 +51,18 @@ class VocabularyAPI:
                 "part_of_speech": None,
                 "audio_url": None,
                 "phonetic": None,
+                "translation": translation,
                 "found": False,
                 "source": "oxford_only"
             }
+    
+    def _get_translation(self, word):
+        """Get Russian translation for a word."""
+        try:
+            return self.translator.translate_to_russian(word)
+        except Exception as e:
+            print(f"Translation error for '{word}': {e}")
+            return None
     
     def get_random_suggestion(self):
         """Get a random C1 or C2 word suggestion."""

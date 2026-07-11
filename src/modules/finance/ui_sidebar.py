@@ -119,11 +119,4 @@ def render_sidebar():
         
         st.divider()
         
-        # Database Actions
-        st.subheader("🗄️ Database Actions")
-        if st.button("🗑️ Clear All Data", type="secondary"):
-            if clear_all_data():
-                st.success("All data cleared!")
-                st.rerun()
-            else:
-                st.error("Failed to clear data.")
+       

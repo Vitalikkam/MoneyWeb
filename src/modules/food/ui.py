@@ -36,6 +36,8 @@ def render_vitamin_progress(summary, key_prefix='total_'):
             st.progress(pct, text=f"{label}: {value:.{decimals}f} / {goal} {unit}  ({pct*100:.0f}%)")
     if not has_any:
         st.caption("No vitamins or minerals logged yet.")
+
+def render_food_tracker():
     """Main food tracker interface."""
     st.title("🍽️ Food Tracker")
     st.caption("Log your meals and track your nutrition")

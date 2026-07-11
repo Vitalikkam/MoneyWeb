@@ -10,7 +10,6 @@ st.set_page_config(
 from src.shared.nav import render_nav
 from src.modules.finance.data import get_all_transactions, add_transaction, save_dataframe, delete_transaction, get_summary, clear_all_data
 from src.shared.styles import apply_dark_theme
-from src.modules.finance.ui_sidebar import render_sidebar
 from src.modules.finance.ui_header import render_header
 from src.modules.finance.ui_quick_add import render_quick_add
 from src.modules.finance.ui_table import render_table, render_kpi, get_data_with_balance
@@ -273,41 +272,27 @@ if current_page == 'home':
             st.rerun()
 
 elif current_page == 'finance':
-    # --- Show sidebar on Finance page ---
-    st.markdown("""
-    <style>
-        section[data-testid="stSidebar"] {
-            display: block !important;
-            width: 300px !important;
-            min-width: 300px !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    render_sidebar()
     render_header()
     render_quick_add()
-    
-    # Load data from Supabase
+
+    # Load data
     df = get_all_transactions()
-    
-    # Check if data exists
+
     if df.empty:
         st.info("💾 No transactions yet. Add one or import CSV.")
         st.stop()
-    
-    # Get data with balance
+
     def add_balance_column(df):
         df = df.copy()
         df['Deposit'] = pd.to_numeric(df['Deposit'], errors='coerce').fillna(0)
         df['Withdrawal'] = pd.to_numeric(df['Withdrawal'], errors='coerce').fillna(0)
         df['Balance'] = (df['Deposit'] - df['Withdrawal']).cumsum()
         return df
-    
+
     df_balance = add_balance_column(df)
-    
+
     show_table = st.session_state.get('show_table', False)
-    
+
     if show_table:
         col_table, col_charts = st.columns([0.4, 0.6])
         with col_table:

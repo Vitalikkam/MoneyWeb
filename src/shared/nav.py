@@ -7,38 +7,56 @@ import streamlit as st
 
 def render_nav():
     """Render the top navigation bar."""
-    
-    # Initialize session state for current page if not exists
+
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'home'
-    
-    # Define pages
+
     pages = {
-        'home': {'icon': '🏠', 'label': 'Home'},
-        'finance': {'icon': '💰', 'label': 'Finance'},
-        'food': {'icon': '🍽️', 'label': 'Food'},
+        'home':        {'icon': '🏠', 'label': 'Home'},
+        'finance':     {'icon': '💰', 'label': 'Finance'},
+        'food':        {'icon': '🍽️', 'label': 'Food'},
         'supplements': {'icon': '💊', 'label': 'Supplements'},
-        'vocabulary': {'icon': '📚', 'label': 'Vocabulary'},
+        'vocabulary':  {'icon': '📚', 'label': 'Vocabulary'},
     }
-    
-    # Create the nav bar with columns
+
+    # Inject nav CSS — active page gets accent underline + brighter text
+    st.markdown("""<style>
+div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 3px solid #4ade80 !important;
+    border-radius: 0 !important;
+    color: #4ade80 !important;
+    font-weight: 700 !important;
+    box-shadow: none !important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    border-radius: 0 !important;
+    color: #94a3b8 !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+    color: #f8fafc !important;
+    border-bottom-color: #334155 !important;
+}
+</style>""", unsafe_allow_html=True)
+
     cols = st.columns(len(pages))
-    
-    # Add a button for each page
     for idx, (page_id, page_info) in enumerate(pages.items()):
         with cols[idx]:
-            # Style the button based on current page
             is_active = st.session_state.current_page == page_id
-            button_label = f"{page_info['icon']} {page_info['label']}"
-            
             if st.button(
-                button_label,
+                f"{page_info['icon']} {page_info['label']}",
                 key=f"nav_{page_id}",
-                width='stretch',
+                use_container_width=True,
                 type="primary" if is_active else "secondary"
             ):
                 if not is_active:
                     st.session_state.current_page = page_id
                     st.rerun()
-    
+
     st.divider()

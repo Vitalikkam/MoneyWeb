@@ -12,34 +12,37 @@ def render_charts(df=None):
         df_with_balance = add_balance_column(df)
     else:
         df_with_balance = df
-    
+
     st.subheader("📈 Visual Analytics")
-    
+
     st.caption("💰 Your Money River (Balance over Time) - PLN")
     fig_river = create_river_chart(df_with_balance)
     if fig_river:
-        st.plotly_chart(fig_river, config={'displayModeBar': False})
-    
+        st.plotly_chart(fig_river, use_container_width=True, config={'displayModeBar': False})
+
     st.caption("📊 Net Change (Deposits - Withdrawals) - PLN")
     tab1, tab2, tab3 = st.tabs(["📅 Daily", "📆 Weekly", "📊 Monthly"])
-    
-    daily_data = prepare_grouped_data(df_with_balance, 'Daily')
-    fig_daily = create_net_chart(daily_data)
-    if fig_daily:
-        st.plotly_chart(fig_daily, config={'displayModeBar': False})
-    else:
-        tab1.info("No daily data")
-    
-    weekly_data = prepare_grouped_data(df_with_balance, 'Weekly')
-    fig_weekly = create_net_chart(weekly_data)
-    if fig_weekly:
-        st.plotly_chart(fig_weekly, config={'displayModeBar': False})
-    else:
-        tab2.info("No weekly data")
-    
-    monthly_data = prepare_grouped_data(df_with_balance, 'Monthly')
-    fig_monthly = create_net_chart(monthly_data)
-    if fig_monthly:
-        st.plotly_chart(fig_monthly, config={'displayModeBar': False})
-    else:
-        tab3.info("No monthly data")
+
+    with tab1:
+        daily_data = prepare_grouped_data(df_with_balance, 'Daily')
+        fig_daily = create_net_chart(daily_data)
+        if fig_daily:
+            st.plotly_chart(fig_daily, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No daily data")
+
+    with tab2:
+        weekly_data = prepare_grouped_data(df_with_balance, 'Weekly')
+        fig_weekly = create_net_chart(weekly_data)
+        if fig_weekly:
+            st.plotly_chart(fig_weekly, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No weekly data")
+
+    with tab3:
+        monthly_data = prepare_grouped_data(df_with_balance, 'Monthly')
+        fig_monthly = create_net_chart(monthly_data)
+        if fig_monthly:
+            st.plotly_chart(fig_monthly, use_container_width=True, config={'displayModeBar': False})
+        else:
+            st.info("No monthly data")

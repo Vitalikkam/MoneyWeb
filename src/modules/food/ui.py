@@ -12,7 +12,30 @@ from src.modules.food.data import (
 )
 from src.modules.food.nutrition_api import NutritionAPI
 
-def render_food_tracker():
+VITAMIN_GOALS = {
+    'total_vitamin_a': ('🅰️ Vitamin A', 900, 'µg'),
+    'total_vitamin_c': ('🅲 Vitamin C', 200, 'mg'),
+    'total_vitamin_d': ('🅳 Vitamin D', 75, 'µg'),
+    'total_calcium':   ('🧂 Calcium',   1100, 'mg'),
+    'total_iron':      ('🔩 Iron',       9, 'mg'),
+    'total_magnesium': ('🧲 Magnesium',  400, 'mg'),
+    'total_zinc':      ('🔋 Zinc',       13, 'mg'),
+    'total_potassium': ('🍌 Potassium',  4000, 'mg'),
+}
+
+def render_vitamin_progress(summary, key_prefix='total_'):
+    """Shared helper: render vitamin/mineral progress bars from a summary dict."""
+    has_any = False
+    for key, (label, goal, unit) in VITAMIN_GOALS.items():
+        # support both 'total_vitamin_a' and 'vitamin_a' prefixes
+        value = summary.get(key, 0) or summary.get(key.replace('total_', ''), 0) or 0
+        if value > 0:
+            has_any = True
+            pct = min(value / goal, 1.0)
+            decimals = 1 if unit == 'mg' and goal < 20 else 0
+            st.progress(pct, text=f"{label}: {value:.{decimals}f} / {goal} {unit}  ({pct*100:.0f}%)")
+    if not has_any:
+        st.caption("No vitamins or minerals logged yet.")
     """Main food tracker interface."""
     st.title("🍽️ Food Tracker")
     st.caption("Log your meals and track your nutrition")
@@ -34,50 +57,27 @@ def render_food_tracker():
 def render_daily_summary():
     """Show today's nutrition summary."""
     summary = get_daily_summary()
-    
+
     if summary['meal_count'] == 0:
         st.info("No meals logged today yet. Start tracking your nutrition!")
         return
-    
-    # Macros
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🔥 Calories", f"{summary['total_calories']:.0f} kcal")
-    col2.metric("💪 Protein", f"{summary['total_protein']:.1f}g")
-    col3.metric("🍞 Carbs", f"{summary['total_carbs']:.1f}g")
-    col4.metric("🥑 Fat", f"{summary['total_fat']:.1f}g")
-    
-    # Vitamins & Minerals (only show if > 0)
-    st.subheader("🧬 Vitamins & Minerals")
-    
-    vitamin_data = [
-        ('total_vitamin_a', '🅰️ Vitamin A', 'µg'),
-        ('total_vitamin_c', '🅲 Vitamin C', 'mg'),
-        ('total_vitamin_d', '🅳 Vitamin D', 'µg'),
-        ('total_calcium', '🧂 Calcium', 'mg'),
-        ('total_iron', '🔩 Iron', 'mg'),
-        ('total_magnesium', '🧲 Magnesium', 'mg'),
-        ('total_zinc', '🔋 Zinc', 'mg'),
-        ('total_potassium', '🍌 Potassium', 'mg'),
-    ]
-    
-    # Only show vitamins that have values
-    has_vitamins = False
+
+    # Macros as progress bars
     col1, col2 = st.columns(2)
-    
-    for i, (key, label, unit) in enumerate(vitamin_data):
-        value = summary.get(key, 0)
-        if value > 0:
-            has_vitamins = True
-            with col1 if i < 4 else col2:
-                if unit == 'µg':
-                    st.metric(label, f"{value:.0f} {unit}")
-                elif unit == 'mg' and key in ['total_iron', 'total_zinc']:
-                    st.metric(label, f"{value:.1f} {unit}")
-                else:
-                    st.metric(label, f"{value:.0f} {unit}")
-    
-    if not has_vitamins:
-        st.caption("No vitamins or minerals logged today.")
+    with col1:
+        st.progress(min(summary['total_calories'] / 3000, 1.0),
+            text=f"🔥 Calories: {summary['total_calories']:.0f} / 3000 kcal ({min(summary['total_calories']/3000*100,100):.0f}%)")
+        st.progress(min(summary['total_protein'] / 155, 1.0),
+            text=f"💪 Protein: {summary['total_protein']:.1f} / 155 g ({min(summary['total_protein']/155*100,100):.0f}%)")
+    with col2:
+        st.progress(min(summary['total_carbs'] / 350, 1.0),
+            text=f"🍞 Carbs: {summary['total_carbs']:.1f} / 350 g ({min(summary['total_carbs']/350*100,100):.0f}%)")
+        st.progress(min(summary['total_fat'] / 80, 1.0),
+            text=f"🥑 Fat: {summary['total_fat']:.1f} / 80 g ({min(summary['total_fat']/80*100,100):.0f}%)")
+
+    # Vitamins & Minerals
+    st.subheader("🧬 Vitamins & Minerals")
+    render_vitamin_progress(summary)
 
 def render_api_form():
     """Render the API-based food entry form."""
@@ -302,12 +302,11 @@ def render_meal_list():
     
     for _, row in entries.iterrows():
         with st.container():
-            col1, col2, col3 = st.columns([4, 2, 1])
-            
+            col1, col2 = st.columns([5, 1])
+
             with col1:
                 st.write(f"**{row['meal_type'].title()}** – {row['food_name']}")
                 st.caption(f"🔥 {row['calories']} kcal | 💪 {row['protein']:.1f}g | 🍞 {row['carbs']:.1f}g | 🥑 {row['fat']:.1f}g")
-                # Show vitamins & minerals in a small row
                 vitamin_text = ""
                 if row.get('vitamin_a', 0) > 0:
                     vitamin_text += f"🅰️{row['vitamin_a']:.0f}µg "
@@ -325,19 +324,15 @@ def render_meal_list():
                     vitamin_text += f"🔋{row['zinc']:.1f}mg "
                 if row.get('potassium', 0) > 0:
                     vitamin_text += f"🍌{row['potassium']:.0f}mg "
-                
                 if vitamin_text:
                     st.caption(vitamin_text)
-            
+
             with col2:
-                pass
-            
-            with col3:
                 if st.button("🗑️", key=f"delete_food_{row['id']}", type="secondary"):
                     if delete_food_entry(row['id']):
                         st.success(f"Deleted: {row['food_name']}")
                         st.rerun()
                     else:
                         st.error("Failed to delete meal")
-        
+
         st.divider()

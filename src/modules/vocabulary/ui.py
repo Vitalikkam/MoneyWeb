@@ -249,45 +249,87 @@ def render_word_card(word_data):
     else:
         image_html = ''
 
-    # --- Build optional fields HTML ---
-    level_badge = f'<span class="word-level">{level}</span>' if level else '<span class="word-level" style="color:#94a3b8;">? Level</span>'
-    translation_html = f'<div class="word-translation"> {translation}</div>' if translation else ''
-    pos_html = f'<div class="word-pos">📖 {part_of_speech}</div>' if part_of_speech else ''
-    example_html = f'<div class="word-example">💬 &ldquo;{example}&rdquo;</div>' if example else ''
-    phonetic_html = f'<div class="word-phonetic">🔊 {phonetic}</div>' if phonetic else ''
+    # --- Level-based accent color ---
+    level_colors = {"C2": "#4ade80", "C1": "#60a5fa", "B2": "#fbbf24"}
+    accent = level_colors.get(level, "#94a3b8")
 
-    # --- Inject styles once (separate call avoids markdown processing issues) ---
-    st.markdown("""<style>
-.word-card-container {background: linear-gradient(145deg, #1e293b, #172032); border: 1px solid #2a3a4b; border-radius: 16px; padding: 24px; margin: 16px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.4); transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;}
-.word-card-container:hover {border-color: #4ade80; transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,0.5);}
-.word-header {display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;}
-.word-title {font-size: 28px; font-weight: 700; color: #f8fafc;}
-.word-level {background: #2a3a4b; color: #4ade80; padding: 2px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; display: inline-block;}
-.word-translation {color: #a78bfa; font-size: 18px; margin: 6px 0;}
-.word-pos {color: #94a3b8; font-size: 13px; margin: 4px 0;}
-.word-definition {color: #e2e8f0; font-size: 15px; line-height: 1.6; margin: 10px 0; padding: 10px 14px; background: #0f172a; border-radius: 8px; border-left: 3px solid #4ade80;}
-.word-example {background: #0f172a; padding: 10px 14px; border-radius: 8px; margin: 10px 0; color: #94a3b8; font-size: 14px; font-style: italic; border-left: 2px solid #4ade80;}
-.word-phonetic {color: #64748b; font-size: 13px; margin-top: 8px;}
-.word-image {text-align: center; margin-bottom: 16px;}
-.word-image img {max-width: 100%; max-height: 250px; border-radius: 12px; border: 1px solid #2a3a4b; object-fit: cover;}
-.word-image .credit {color: #64748b; font-size: 11px; margin-top: 4px;}
-.word-image .credit a {color: #4ade80; text-decoration: none;}
-.word-emoji {text-align: center; font-size: 80px; padding: 16px; background: #0f172a; border-radius: 12px; border: 1px solid #2a3a4b; margin-bottom: 16px;}
+    # --- Build image section: full-width hero with gradient overlay + word on top ---
+    if image_data.get("url"):
+        photographer = image_data.get('photographer', 'Unknown')
+        photographer_url = image_data.get('photographer_url', '#')
+        image_section = (
+            f'<div class="wc-hero" style="background-image:url({image_data["url"]})">'
+            f'<div class="wc-hero-overlay" style="background:linear-gradient(to bottom, rgba(15,23,42,0.2) 0%, rgba(15,23,42,0.92) 100%);">'
+            f'<div class="wc-hero-content">'
+            f'<div class="wc-title-row">'
+            f'<span class="wc-title">{word_display}</span>'
+            f'<span class="wc-badge" style="background:{accent}22;color:{accent};border:1px solid {accent}55;">{level or "?"}</span>'
+            f'</div>'
+            f'{"<span class=wc-phonetic>" + phonetic + "</span>" if phonetic else ""}'
+            f'{"<span class=wc-translation>" + translation + "</span>" if translation else ""}'
+            f'</div>'
+            f'<div class="wc-credit">📷 <a href="{photographer_url}" target="_blank">{photographer}</a> · Pexels</div>'
+            f'</div></div>'
+        )
+    elif image_data.get("emoji"):
+        image_section = (
+            f'<div class="wc-emoji-hero" style="border-bottom:1px solid {accent}33;">'
+            f'<div style="font-size:72px;line-height:1;">{image_data["emoji"]}</div>'
+            f'<div class="wc-title-row" style="margin-top:12px;">'
+            f'<span class="wc-title" style="color:#f8fafc;">{word_display}</span>'
+            f'<span class="wc-badge" style="background:{accent}22;color:{accent};border:1px solid {accent}55;">{level or "?"}</span>'
+            f'</div>'
+            f'{"<span class=wc-phonetic style=color:#94a3b8>" + phonetic + "</span>" if phonetic else ""}'
+            f'{"<span class=wc-translation>" + translation + "</span>" if translation else ""}'
+            f'</div>'
+        )
+    else:
+        image_section = (
+            f'<div class="wc-title-row" style="margin-bottom:8px;">'
+            f'<span class="wc-title" style="color:#f8fafc;">{word_display}</span>'
+            f'<span class="wc-badge" style="background:{accent}22;color:{accent};border:1px solid {accent}55;">{level or "?"}</span>'
+            f'</div>'
+            f'{"<span class=wc-phonetic>" + phonetic + "</span>" if phonetic else ""}'
+            f'{"<span class=wc-translation>" + translation + "</span>" if translation else ""}'
+        )
+
+    pos_html      = f'<span class="wc-pos">{part_of_speech}</span>' if part_of_speech else ''
+    example_html  = f'<div class="wc-example">❝ {example} ❞</div>' if example else ''
+
+    # --- Styles ---
+    st.markdown(f"""<style>
+.wc-card {{background:rgba(15,23,42,0.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid {accent}44;border-radius:20px;overflow:hidden;box-shadow:0 0 32px {accent}22, 0 8px 32px rgba(0,0,0,0.5);transition:box-shadow 0.3s,transform 0.3s;margin:16px 0;}}
+.wc-card:hover {{box-shadow:0 0 48px {accent}44, 0 12px 40px rgba(0,0,0,0.6);transform:translateY(-3px);}}
+.wc-hero {{width:100%;height:320px;background-size:cover;background-position:center;position:relative;}}
+.wc-hero-overlay {{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:20px;}}
+.wc-hero-content {{display:flex;flex-direction:column;gap:4px;}}
+.wc-emoji-hero {{padding:28px 24px 20px;text-align:center;background:linear-gradient(145deg,#1e293b,#0f172a);}}
+.wc-title-row {{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}}
+.wc-title {{font-size:32px;font-weight:800;color:#f8fafc;letter-spacing:-0.5px;text-shadow:0 2px 8px rgba(0,0,0,0.8);}}
+.wc-badge {{font-size:12px;font-weight:700;padding:3px 12px;border-radius:20px;letter-spacing:0.5px;text-transform:uppercase;}}
+.wc-phonetic {{color:#94a3b8;font-size:14px;font-style:italic;}}
+.wc-translation {{color:#c4b5fd;font-size:16px;font-weight:500;}}
+.wc-body {{padding:20px 24px 24px;}}
+.wc-pos {{display:inline-block;color:{accent};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}}
+.wc-definition {{color:#e2e8f0;font-size:15px;line-height:1.7;padding:14px 16px;background:rgba(255,255,255,0.04);border-radius:10px;border-left:3px solid {accent};margin-bottom:12px;}}
+.wc-example {{color:#94a3b8;font-size:14px;font-style:italic;line-height:1.6;padding:12px 16px;background:rgba(255,255,255,0.03);border-radius:10px;border-left:2px solid {accent}88;}}
+.wc-credit {{font-size:10px;color:#475569;text-align:right;}} .wc-credit a {{color:{accent}99;text-decoration:none;}}
+.wc-buttons div[data-testid="stHorizontalBlock"] {{gap:12px;}}
+.wc-buttons button[kind="primary"] {{background:linear-gradient(135deg,{accent},{accent}cc) !important;border:none !important;color:#0f172a !important;font-weight:700 !important;font-size:15px !important;border-radius:12px !important;padding:12px 0 !important;box-shadow:0 4px 16px {accent}44 !important;transition:all 0.2s !important;}}
+.wc-buttons button[kind="primary"]:hover {{transform:translateY(-1px) !important;box-shadow:0 6px 20px {accent}66 !important;}}
+.wc-buttons button[kind="secondary"] {{background:rgba(255,255,255,0.06) !important;border:1px solid rgba(255,255,255,0.12) !important;color:#94a3b8 !important;font-weight:600 !important;font-size:15px !important;border-radius:12px !important;padding:12px 0 !important;transition:all 0.2s !important;}}
+.wc-buttons button[kind="secondary"]:hover {{background:rgba(255,255,255,0.1) !important;color:#f8fafc !important;border-color:rgba(255,255,255,0.2) !important;}}
 </style>""", unsafe_allow_html=True)
 
-    # --- Render card HTML (no f-string braces in CSS, no indentation issues) ---
+    # --- Render card ---
     card_html = (
-        '<div class="word-card-container">'
-        + image_html
-        + '<div class="word-header">'
-        + f'<span class="word-title">{word_display}</span>'
-        + level_badge
-        + '</div>'
-        + translation_html
+        '<div class="wc-card">'
+        + image_section
+        + '<div class="wc-body">'
         + pos_html
-        + f'<div class="word-definition">📖 {definition}</div>'
+        + f'<div class="wc-definition">{definition}</div>'
         + example_html
-        + phonetic_html
+        + '</div>'
         + '</div>'
     )
     st.markdown(card_html, unsafe_allow_html=True)
@@ -296,11 +338,11 @@ def render_word_card(word_data):
     if audio_url:
         st.audio(audio_url, format="audio/mpeg")
 
-    # --- Buttons ---
+    # --- Styled action buttons ---
+    st.markdown('<div class="wc-buttons">', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
-
     with col1:
-        if st.button("📚 Learn This Word", type="primary", use_container_width=True):
+        if st.button("＋ Add to Vocabulary", type="primary", use_container_width=True, key="wc_learn"):
             if word_exists(word_key):
                 st.warning(f"'{word_key}' is already in your vocabulary!")
             else:
@@ -315,16 +357,18 @@ def render_word_card(word_data):
                     category="suggested",
                     mastery=4
                 ):
-                    st.success(f"✅ Added '{word_key}' to your vocabulary!")
+                    st.success(f"✅ Added '{word_key}'!")
                     st.session_state.current_suggestion = None
+                    st.session_state.suggestion_loaded = False
                     st.rerun()
                 else:
                     st.error("Failed to add word.")
-
     with col2:
-        if st.button("⏭️ Skip", use_container_width=True):
+        if st.button("→ Next Word", use_container_width=True, key="wc_skip"):
             st.session_state.current_suggestion = None
+            st.session_state.suggestion_loaded = False
             st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def render_vocabulary_list():
     """Render the vocabulary list with filters and actions."""

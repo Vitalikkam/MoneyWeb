@@ -1,11 +1,25 @@
 from src.database import db
 import pandas as pd
 
+def _normalize_columns(df):
+    """Rename columns to match expected format (Deposit, Withdrawal)."""
+    if df.empty:
+        return df
+    # Rename lowercase columns to capitalized
+    rename_map = {}
+    for col in df.columns:
+        if col.lower() == 'deposit' and col != 'Deposit':
+            rename_map[col] = 'Deposit'
+        elif col.lower() == 'withdrawal' and col != 'Withdrawal':
+            rename_map[col] = 'Withdrawal'
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
+
 def get_all_transactions():
     """Get all transactions from the database."""
     df = db.get_transactions()
-    # The database already returns columns with proper names from supabase_client
-    return df
+    return _normalize_columns(df)
 
 def add_transaction(date, deposit, withdrawal):
     """Add a new transaction."""
@@ -13,7 +27,9 @@ def add_transaction(date, deposit, withdrawal):
 
 def save_dataframe(df):
     """Save a dataframe of transactions."""
-    # If df has no 'id' column, treat all rows as new
+    # Ensure columns are normalized
+    df = _normalize_columns(df)
+    
     if 'id' not in df.columns:
         for _, row in df.iterrows():
             db.add_transaction(
@@ -23,17 +39,15 @@ def save_dataframe(df):
             )
         return True
     
-    # If df has 'id' column, update existing and add new
     existing = db.get_transactions()
+    existing = _normalize_columns(existing)
     existing_ids = set(existing['id'].tolist()) if not existing.empty else set()
     new_ids = set(df['id'].tolist()) if not df.empty else set()
     
-    # Find deleted rows
     deleted_ids = existing_ids - new_ids
     for tx_id in deleted_ids:
         db.delete_transaction(tx_id)
     
-    # Update or insert each row
     for _, row in df.iterrows():
         if row['id'] in existing_ids:
             db.update_transaction(
@@ -55,14 +69,11 @@ def delete_transaction(tx_id):
 
 def get_summary():
     df = db.get_transactions()
+    df = _normalize_columns(df)
     if df.empty:
         return {"total_deposits": 0, "total_withdrawals": 0, "total_balance": 0}
-    # Use lowercase column names from Supabase
-    deposit_col = 'Deposit' if 'Deposit' in df.columns else 'deposit'
-    withdrawal_col = 'Withdrawal' if 'Withdrawal' in df.columns else 'withdrawal'
-    
-    total_deposits = df[deposit_col].sum()
-    total_withdrawals = df[withdrawal_col].sum()
+    total_deposits = df['Deposit'].sum()
+    total_withdrawals = df['Withdrawal'].sum()
     total_balance = total_deposits - total_withdrawals
     return {
         "total_deposits": total_deposits,

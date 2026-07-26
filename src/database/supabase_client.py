@@ -20,13 +20,13 @@ class SupabaseClient(DatabaseInterface):
         try:
             query = self.supabase.table("transactions").select("*")
             if start_date and end_date:
-                query = query.gte("date", start_date).lte("date", end_date)  # Changed from "Date" to "date"
-            response = query.order("date").execute()  # Changed from "Date" to "date"
+                query = query.gte("date", start_date).lte("date", end_date)
+            response = query.order("date").execute()
             data = response.data
             if not data:
                 return pd.DataFrame(columns=['id', 'Date', 'Deposit', 'Withdrawal'])
             df = pd.DataFrame(data)
-            df['Date'] = pd.to_datetime(df['date']).dt.date  # Changed to use lowercase 'date' column
+            df['Date'] = pd.to_datetime(df['date']).dt.date
             return df
         except Exception as e:
             st.error(f"Error fetching transactions: {e}")
@@ -36,8 +36,8 @@ class SupabaseClient(DatabaseInterface):
         try:
             self.supabase.table("transactions").insert({
                 "date": date,
-                "Deposit": float(deposit),
-                "Withdrawal": float(withdrawal)
+                "deposit": float(deposit),
+                "withdrawal": float(withdrawal)
             }).execute()
             return True
         except Exception as e:
@@ -47,9 +47,9 @@ class SupabaseClient(DatabaseInterface):
     def update_transaction(self, id, date, deposit, withdrawal):
         try:
             self.supabase.table("transactions").update({
-                "Date": date,
-                "Deposit": float(deposit),
-                "Withdrawal": float(withdrawal)
+                "date": date,
+                "deposit": float(deposit),
+                "withdrawal": float(withdrawal)
             }).eq("id", id).execute()
             return True
         except Exception as e:
@@ -62,60 +62,6 @@ class SupabaseClient(DatabaseInterface):
             return True
         except Exception as e:
             st.error(f"Error deleting transaction: {e}")
-            return False
-    
-    # ============================================
-    # FOOD ENTRY METHODS
-    # ============================================
-    
-    def get_food_entries(self, date=None):
-        try:
-            query = self.supabase.table("food_entries").select("*")
-            if date:
-                query = query.eq("Date", date)
-            response = query.order("id", desc=True).execute()
-            data = response.data
-            if not data:
-                return pd.DataFrame(columns=['id', 'Date', 'meal_type', 'food_name', 'calories', 'protein', 'carbs', 'fat'])
-            df = pd.DataFrame(data)
-            df['Date'] = pd.to_datetime(df['Date']).dt.date
-            return df
-        except Exception as e:
-            st.error(f"Error fetching food entries: {e}")
-            return pd.DataFrame(columns=['id', 'Date', 'meal_type', 'food_name', 'calories', 'protein', 'carbs', 'fat'])
-    
-    def add_food_entry(self, date, meal_type, food_name, calories, protein=0, carbs=0, fat=0,
-                       vitamin_a=0, vitamin_c=0, vitamin_d=0, calcium=0, iron=0,
-                       magnesium=0, zinc=0, potassium=0):
-        try:
-            self.supabase.table("food_entries").insert({
-                "Date": date,
-                "meal_type": meal_type,
-                "food_name": food_name,
-                "calories": int(calories),
-                "protein": float(protein),
-                "carbs": float(carbs),
-                "fat": float(fat),
-                "vitamin_a": float(vitamin_a),
-                "vitamin_c": float(vitamin_c),
-                "vitamin_d": float(vitamin_d),
-                "calcium": float(calcium),
-                "iron": float(iron),
-                "magnesium": float(magnesium),
-                "zinc": float(zinc),
-                "potassium": float(potassium)
-            }).execute()
-            return True
-        except Exception as e:
-            st.error(f"Error adding food entry: {e}")
-            return False
-    
-    def delete_food_entry(self, entry_id):
-        try:
-            self.supabase.table("food_entries").delete().eq("id", entry_id).execute()
-            return True
-        except Exception as e:
-            st.error(f"Error deleting food entry: {e}")
             return False
     
     # ============================================
@@ -139,7 +85,7 @@ class SupabaseClient(DatabaseInterface):
         except Exception as e:
             st.error(f"Error fetching supplements: {e}")
             return pd.DataFrame(columns=['id', 'Date', 'supplement_name', 'dosage', 'unit', 'taken'])
-
+    
     def add_supplement(self, date, supplement_name, dosage, unit):
         try:
             self.supabase.table("supplements").insert({
@@ -152,7 +98,7 @@ class SupabaseClient(DatabaseInterface):
         except Exception as e:
             st.error(f"Error adding supplement: {e}")
             return False
-
+    
     def set_supplement_taken(self, date, supplement_name, dosage, unit, taken):
         try:
             # Check if entry exists
@@ -257,9 +203,15 @@ class SupabaseClient(DatabaseInterface):
             }).eq("word", word).execute()
             
             # Increment times_reviewed
-            self.supabase.table("vocabulary").update({
-                "times_reviewed": self.supabase.table("vocabulary").select("times_reviewed").eq("word", word).execute().data[0]['times_reviewed'] + 1
-            }).eq("word", word).execute()
+            try:
+                current = self.supabase.table("vocabulary").select("times_reviewed").eq("word", word).execute()
+                if current.data:
+                    times = current.data[0].get('times_reviewed', 0) + 1
+                    self.supabase.table("vocabulary").update({
+                        "times_reviewed": times
+                    }).eq("word", word).execute()
+            except:
+                pass
             return True
         except Exception as e:
             st.error(f"Error updating vocabulary review: {e}")

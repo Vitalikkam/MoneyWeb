@@ -7,7 +7,6 @@ class ProdConfig:
     
     @staticmethod
     def get_supabase_url():
-        # Try secrets first, then environment variable
         try:
             return st.secrets["prod"]["SUPABASE_URL"]
         except:

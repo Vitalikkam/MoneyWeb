@@ -7,6 +7,7 @@ st.set_page_config(
 )
 
 # --- Now everything else ---
+import os
 from src.shared.nav import render_nav
 from src.modules.finance.data import get_all_transactions, add_transaction, save_dataframe, delete_transaction, get_summary, clear_all_data
 from src.shared.styles import apply_dark_theme
@@ -86,4 +87,9 @@ elif current_page == 'learning':
     from src.modules.learning.ui import render_learning_tracker
     render_learning_tracker()
 
+# Debug: Print environment (this will show in logs)
+print(f"🔍 APP_ENV = {os.getenv('APP_ENV', 'NOT SET')}")
 
+# Force production environment
+os.environ["APP_ENV"] = "prod"
+print(f"🔍 APP_ENV set to: {os.getenv('APP_ENV')}")

@@ -1,6 +1,10 @@
 import os
+import sys
 from .interface import DatabaseInterface
 from src.config import Config
+
+# Debug: Print which environment we're in
+print(f"🔍 Config environment: {Config.get_env()}")
 
 # Don't import Supabase at the top - import it only when needed
 
@@ -20,6 +24,10 @@ class SQLiteClient:
     def _ensure_db_exists(self):
         """Create the database file if it doesn't exist."""
         import sqlite3
+        # Create the directory if it doesn't exist
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         conn.close()
     
@@ -472,11 +480,16 @@ class SQLiteClient:
 def get_database():
     """Get the appropriate database client based on environment."""
     env = Config.get_env()
+    print(f"🔍 Database environment: {env}")
+    
     if env == "prod":
+        print("🔍 Using Supabase (production)")
         from .supabase_client import SupabaseClient
         return SupabaseClient()
     else:
+        print("🔍 Using SQLite (development)")
+        # Use absolute path for SQLite in development
         db_path = os.path.expanduser("~/Mycode/MymoneyWeb/MymoneyWeb/finances.db")
-        return SQLiteClient(db_path) 
+        return SQLiteClient(db_path)
 
 db = get_database()

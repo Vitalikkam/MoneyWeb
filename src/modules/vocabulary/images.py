@@ -27,6 +27,7 @@ class ImageAPI:
         # First check if we have an emoji fallback
         emoji = get_emoji(word)
         
+        # If no API key, use emoji only
         if not self.api_key:
             return {"url": None, "emoji": emoji, "source": "emoji"}
         
@@ -35,7 +36,7 @@ class ImageAPI:
             url = f"{self.base_url}/search"
             params = {
                 "query": word,
-                "per_page": 5,
+                "per_page": 3,
                 "orientation": "landscape",
                 "size": "medium"
             }
@@ -67,6 +68,8 @@ class ImageAPI:
                         }
                 else:
                     print(f"⚠️ No photos found for {word}")
+            else:
+                print(f"⚠️ Pexels API error: {response.status_code}")
             
             # If API fails or no photos found, use emoji
             return {"url": None, "emoji": emoji, "source": "emoji"}
@@ -74,34 +77,3 @@ class ImageAPI:
         except Exception as e:
             print(f"Error fetching image: {e}")
             return {"url": None, "emoji": emoji, "source": "emoji"}
-    
-    def display_image(self, word, width=400):
-        """Display an image for a word."""
-        image_data = self.get_image_url(word)
-        
-        if image_data.get("url"):
-            # Display real image
-            st.markdown(f"""
-            <div style="text-align:center;margin:8px 0;">
-                <img src="{image_data['url']}" alt="{image_data['alt']}" style="max-width:{width}px;width:100%;border-radius:12px;border:1px solid #2a3a4b;">
-                <div style="color:#64748b;font-size:11px;margin-top:4px;">
-                    📷 Photo by <a href="{image_data['photographer_url']}" target="_blank" style="color:#4ade80;text-decoration:none;">{image_data['photographer']}</a> on Pexels
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        elif image_data.get("emoji"):
-            # Display emoji fallback
-            st.markdown(f"""
-            <div style="text-align:center;font-size:80px;margin:8px 0;padding:20px;background:#0f172a;border-radius:12px;border:1px solid #2a3a4b;">
-                {image_data['emoji']}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            # No image available
-            st.markdown(f"""
-            <div style="text-align:center;font-size:40px;margin:8px 0;padding:20px;background:#0f172a;border-radius:12px;border:1px solid #2a3a4b;color:#64748b;">
-                📚 No image available
-            </div>
-            """, unsafe_allow_html=True)
-        
-        return image_data

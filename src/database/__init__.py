@@ -1,7 +1,7 @@
-import os
-import sys
 from .interface import DatabaseInterface
 from src.config import Config
+import os
+import sys
 
 # Debug: Print which environment we're in
 print(f"🔍 Config environment: {Config.get_env()}")

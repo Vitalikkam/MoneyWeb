@@ -20,13 +20,13 @@ class SupabaseClient(DatabaseInterface):
         try:
             query = self.supabase.table("transactions").select("*")
             if start_date and end_date:
-                query = query.gte("Date", start_date).lte("Date", end_date)
-            response = query.order("Date").execute()
+                query = query.gte("date", start_date).lte("date", end_date)  # Changed from "Date" to "date"
+            response = query.order("date").execute()  # Changed from "Date" to "date"
             data = response.data
             if not data:
                 return pd.DataFrame(columns=['id', 'Date', 'Deposit', 'Withdrawal'])
             df = pd.DataFrame(data)
-            df['Date'] = pd.to_datetime(df['Date']).dt.date
+            df['Date'] = pd.to_datetime(df['date']).dt.date  # Changed to use lowercase 'date' column
             return df
         except Exception as e:
             st.error(f"Error fetching transactions: {e}")
@@ -35,7 +35,7 @@ class SupabaseClient(DatabaseInterface):
     def add_transaction(self, date, deposit, withdrawal):
         try:
             self.supabase.table("transactions").insert({
-                "Date": date,
+                "date": date,
                 "Deposit": float(deposit),
                 "Withdrawal": float(withdrawal)
             }).execute()

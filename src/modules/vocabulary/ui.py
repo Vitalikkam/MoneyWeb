@@ -4,8 +4,6 @@ Vocabulary UI components – suggestion, review, list views.
 
 import streamlit as st
 import pandas as pd
-import streamlit_card
-from streamlit_card import card
 from datetime import datetime
 from .data import (
     add_vocabulary,

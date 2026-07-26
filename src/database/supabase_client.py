@@ -2,6 +2,7 @@ from supabase import create_client
 import streamlit as st
 import pandas as pd
 from .interface import DatabaseInterface
+from datetime import datetime, timedelta
 
 class SupabaseClient(DatabaseInterface):
     """Supabase implementation for production."""
@@ -109,6 +110,14 @@ class SupabaseClient(DatabaseInterface):
             st.error(f"Error adding food entry: {e}")
             return False
     
+    def delete_food_entry(self, entry_id):
+        try:
+            self.supabase.table("food_entries").delete().eq("id", entry_id).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error deleting food entry: {e}")
+            return False
+    
     # ============================================
     # SUPPLEMENT METHODS
     # ============================================
@@ -192,9 +201,6 @@ class SupabaseClient(DatabaseInterface):
             if not data:
                 return pd.DataFrame(columns=['id', 'word', 'cefr_level', 'definition', 'example_sentence', 'translation', 'importance', 'mastery', 'category', 'date_added', 'last_reviewed', 'times_reviewed', 'next_review_date'])
             df = pd.DataFrame(data)
-            df['date_added'] = pd.to_datetime(df['date_added']).dt.date if 'date_added' in df.columns else None
-            df['last_reviewed'] = pd.to_datetime(df['last_reviewed']).dt.date if 'last_reviewed' in df.columns else None
-            df['next_review_date'] = pd.to_datetime(df['next_review_date']).dt.date if 'next_review_date' in df.columns else None
             return df
         except Exception as e:
             st.error(f"Error fetching vocabulary: {e}")
@@ -247,7 +253,11 @@ class SupabaseClient(DatabaseInterface):
             self.supabase.table("vocabulary").update({
                 "mastery": mastery,
                 "last_reviewed": today,
-                "next_review_date": next_review,
+                "next_review_date": next_review
+            }).eq("word", word).execute()
+            
+            # Increment times_reviewed
+            self.supabase.table("vocabulary").update({
                 "times_reviewed": self.supabase.table("vocabulary").select("times_reviewed").eq("word", word).execute().data[0]['times_reviewed'] + 1
             }).eq("word", word).execute()
             return True
@@ -261,6 +271,29 @@ class SupabaseClient(DatabaseInterface):
             return True
         except Exception as e:
             st.error(f"Error deleting vocabulary: {e}")
+            return False
+    
+    def get_vocabulary_due(self):
+        """Get vocabulary words due for review."""
+        try:
+            today = datetime.today().strftime('%Y-%m-%d')
+            response = self.supabase.table("vocabulary").select("*").lte("next_review_date", today).execute()
+            data = response.data
+            if not data:
+                return pd.DataFrame(columns=['id', 'word', 'cefr_level', 'definition', 'example_sentence', 'translation', 'importance', 'mastery', 'category', 'date_added', 'last_reviewed', 'times_reviewed', 'next_review_date'])
+            df = pd.DataFrame(data)
+            return df
+        except Exception as e:
+            st.error(f"Error fetching vocabulary due: {e}")
+            return pd.DataFrame(columns=['id', 'word', 'cefr_level', 'definition', 'example_sentence', 'translation', 'importance', 'mastery', 'category', 'date_added', 'last_reviewed', 'times_reviewed', 'next_review_date'])
+    
+    def word_exists(self, word):
+        """Check if a word exists in vocabulary."""
+        try:
+            response = self.supabase.table("vocabulary").select("id").eq("word", word).execute()
+            return len(response.data) > 0
+        except Exception as e:
+            st.error(f"Error checking word exists: {e}")
             return False
     
     # ============================================
@@ -277,8 +310,6 @@ class SupabaseClient(DatabaseInterface):
             if not data:
                 return pd.DataFrame(columns=['id', 'name', 'category', 'priority', 'goal', 'status', 'start_date', 'target_date', 'completion_percentage', 'created_at'])
             df = pd.DataFrame(data)
-            df['start_date'] = pd.to_datetime(df['start_date']).dt.date if 'start_date' in df.columns else None
-            df['target_date'] = pd.to_datetime(df['target_date']).dt.date if 'target_date' in df.columns else None
             return df
         except Exception as e:
             st.error(f"Error fetching learning subjects: {e}")
@@ -318,7 +349,6 @@ class SupabaseClient(DatabaseInterface):
     
     def delete_learning_subject(self, subject_id):
         try:
-            # Delete related sessions first
             self.supabase.table("learning_sessions").delete().eq("subject_id", subject_id).execute()
             self.supabase.table("learning_milestones").delete().eq("subject_id", subject_id).execute()
             self.supabase.table("learning_subjects").delete().eq("id", subject_id).execute()
@@ -333,15 +363,13 @@ class SupabaseClient(DatabaseInterface):
             if subject_id:
                 query = query.eq("subject_id", subject_id)
             if days:
-                import datetime
-                date_limit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y-%m-%d')
+                date_limit = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
                 query = query.gte("date", date_limit)
             response = query.order("date", desc=True).execute()
             data = response.data
             if not data:
                 return pd.DataFrame(columns=['id', 'subject_id', 'date', 'duration', 'content', 'notes', 'rating', 'created_at'])
             df = pd.DataFrame(data)
-            df['date'] = pd.to_datetime(df['date']).dt.date if 'date' in df.columns else None
             return df
         except Exception as e:
             st.error(f"Error fetching learning sessions: {e}")
@@ -380,7 +408,6 @@ class SupabaseClient(DatabaseInterface):
             if not data:
                 return pd.DataFrame(columns=['id', 'subject_id', 'name', 'achieved_date', 'notes', 'created_at'])
             df = pd.DataFrame(data)
-            df['achieved_date'] = pd.to_datetime(df['achieved_date']).dt.date if 'achieved_date' in df.columns else None
             return df
         except Exception as e:
             st.error(f"Error fetching learning milestones: {e}")

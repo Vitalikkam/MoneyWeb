@@ -19,7 +19,6 @@ st.set_page_config(
 from src.shared.nav import render_nav
 from src.modules.finance.data import get_all_transactions, add_transaction, save_dataframe, delete_transaction, get_summary, clear_all_data
 from src.shared.styles import apply_dark_theme
-from src.modules.finance.ui_sidebar import render_sidebar
 from src.modules.finance.ui_header import render_header
 from src.modules.finance.ui_quick_add import render_quick_add
 from src.modules.finance.ui_table import render_table, render_kpi, get_data_with_balance
@@ -28,16 +27,6 @@ from src.shared.currency import get_current_rate
 import pandas as pd
 
 apply_dark_theme()
-
-# --- CSS to control sidebar visibility ---
-st.markdown("""
-<style>
-    /* Hide sidebar by default on all pages */
-    section[data-testid="stSidebar"] {
-        display: none !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # --- Render Navigation ---
 render_nav()
@@ -151,18 +140,7 @@ if current_page == 'home':
             st.rerun()
 
 elif current_page == 'finance':
-    # --- Show sidebar on Finance page ---
-    st.markdown("""
-    <style>
-        section[data-testid="stSidebar"] {
-            display: block !important;
-            width: 300px !important;
-            min-width: 300px !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    render_sidebar()
+    # --- Finance Page ---
     render_header()
     render_quick_add()
     
@@ -222,4 +200,4 @@ elif current_page == 'insights':
     st.caption("Cross-module insights and analytics – coming soon!")
     st.info("🚧 This feature is under development.")
 
-st.caption("💡 Use the sidebar for Finance settings and CSV tools.")
+st.caption("💡 Use the top navigation to switch between modules.")

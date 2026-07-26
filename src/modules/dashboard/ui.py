@@ -1,160 +1,196 @@
 """
-Dashboard home page.
+Dashboard UI components – Home page widgets.
 """
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-
+from src.modules.finance.data import get_all_transactions, get_summary
+from src.modules.supplements.data import get_daily_summary
+from src.modules.vocabulary.data import get_stats
+from src.modules.learning.data import get_study_streak, get_subjects
+from src.shared.currency import get_current_rate
 
 def render_dashboard():
-    """Main dashboard page."""
-    from src.modules.finance.data import get_all_transactions, get_summary
-    from src.modules.supplements.data import get_supplements
-    from src.modules.supplements.config import DEFAULT_SUPPLEMENTS
-    from src.modules.vocabulary.data import get_words_due_for_review, get_stats
-
+    """Render the main dashboard."""
+    st.title("🏠 Dashboard")
+    st.caption("Welcome to your Life Dashboard! Overview of all your data.")
+    
+    # Get exchange rate
     rate = st.session_state.get('display_rate', 3.766)
+    
+    # --- Layout ---
+    col1, col2 = st.columns(2)
+    
+    # === FINANCE COLUMN ===
+    with col1:
+        render_finance_widget(rate)
+    
+    # === SECOND COLUMN (Supplements + Vocabulary + Learning) ===
+    with col2:
+        render_supplements_widget()
+        st.divider()
+        render_vocabulary_widget()
+        st.divider()
+        render_learning_widget()
+    
+    st.divider()
+    
+    # === Quick Actions ===
+    render_quick_actions()
+
+def render_finance_widget(rate):
+    """Render the finance summary widget."""
+    st.subheader("💰 Finance")
+    
+    df = get_all_transactions()
+    if df.empty:
+        st.info("No transactions yet.")
+        return
+    
+    summary = get_summary()
+    
+    # PLN values
+    total_balance_pln = summary['total_balance']
+    total_deposits_pln = summary['total_deposits']
+    total_withdrawals_pln = summary['total_withdrawals']
+    
+    # USD values
+    total_balance_usd = total_balance_pln / rate if rate else 0
+    total_deposits_usd = total_deposits_pln / rate if rate else 0
+    total_withdrawals_usd = total_withdrawals_pln / rate if rate else 0
+    
+    # Finance metrics
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("💰 Balance", f"{total_balance_pln:,.2f} zł", f"${total_balance_usd:,.2f} USD")
+    col_b.metric("📥 Deposits", f"{total_deposits_pln:,.2f} zł")
+    col_c.metric("📤 Withdrawals", f"{total_withdrawals_pln:,.2f} zł")
+    
+    # Recent transactions
+    st.caption("📋 Recent Transactions")
+    df_recent = df.tail(5).sort_values('Date', ascending=False)
+    if not df_recent.empty:
+        for _, row in df_recent.iterrows():
+            if row['Deposit'] > 0:
+                amount = f"+{row['Deposit']:.2f} zł"
+                color = "🟢"
+            else:
+                amount = f"-{row['Withdrawal']:.2f} zł"
+                color = "🔴"
+            date_str = pd.to_datetime(row['Date']).strftime('%b %d')
+            st.write(f"{date_str}  {color}  {amount}")
+    else:
+        st.caption("No recent transactions")
+    
+    # Mini chart
+    st.caption("Net Worth Trend")
+    from src.modules.finance.plots import create_river_chart
+    df_balance = df.copy()
+    df_balance['Deposit'] = pd.to_numeric(df_balance['Deposit'], errors='coerce').fillna(0)
+    df_balance['Withdrawal'] = pd.to_numeric(df_balance['Withdrawal'], errors='coerce').fillna(0)
+    df_balance['Balance'] = (df_balance['Deposit'] - df_balance['Withdrawal']).cumsum()
+    
+    fig = create_river_chart(df_balance)
+    if fig:
+        fig.update_layout(height=200, yaxis_title="PLN", showlegend=False)
+        st.plotly_chart(fig, config={'displayModeBar': False})
+
+def render_supplements_widget():
+    """Render the supplements summary widget."""
+    st.subheader("💊 Supplements")
+    
     today = datetime.today().strftime('%Y-%m-%d')
-
-    df_finance   = get_all_transactions()
-    vocab_stats  = get_stats()
-    due_words    = get_words_due_for_review()
-
-    # Supplements today
-    supp_df = get_supplements(today, today)
-    supp_taken = len(supp_df[supp_df['taken'] == 1]) if not supp_df.empty else 0
-    supp_total = len(DEFAULT_SUPPLEMENTS)
-
-    # Finance summary
-    fin_summary = get_summary() if not df_finance.empty else {}
-    balance_pln = fin_summary.get('total_balance', 0)
-    balance_usd = balance_pln / rate
-
-    # --- Styles ---
-    st.markdown("""<style>
-.db-card {background:rgba(30,41,59,0.8);border:1px solid #2a3a4b;border-radius:16px;padding:20px 24px;margin-bottom:12px;}
-.db-card-title {color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
-.db-kpi {font-size:32px;font-weight:800;color:#f8fafc;line-height:1.1;}
-.db-kpi-sub {font-size:13px;color:#64748b;margin-top:2px;}
-.db-tx-row {display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b;}
-.db-tx-date {color:#64748b;font-size:12px;}
-.db-tx-pos {color:#4ade80;font-weight:600;}
-.db-tx-neg {color:#f87171;font-weight:600;}
-.db-section-header {font-size:13px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin:4px 0 10px 0;}
-</style>""", unsafe_allow_html=True)
-
-    # --- Top KPI strip ---
-    k1, k2, k3  = st.columns(3)
-
-    with k1:
-        color = "#4ade80" if balance_pln >= 0 else "#f87171"
-        st.markdown(
-            f'<div class="db-card">'
-            f'<div class="db-card-title">💰 Balance</div>'
-            f'<div class="db-kpi" style="color:{color}">{balance_pln:,.0f} zł</div>'
-            f'<div class="db-kpi-sub">${balance_usd:,.0f} USD</div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-
-    with k2:
-        supp_color = "#4ade80" if supp_taken == supp_total else "#fbbf24" if supp_taken > 0 else "#94a3b8"
-        st.markdown(
-            f'<div class="db-card">'
-            f'<div class="db-card-title">💊 Supplements</div>'
-            f'<div class="db-kpi" style="color:{supp_color}">{supp_taken}/{supp_total}</div>'
-            f'<div class="db-kpi-sub">taken today</div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-    with k3:
-        due_count = len(due_words)
-        due_color = "#f87171" if due_count > 0 else "#4ade80"
-        st.markdown(
-            f'<div class="db-card">'
-            f'<div class="db-card-title">📚 Vocab Due</div>'
-            f'<div class="db-kpi" style="color:{due_color}">{due_count}</div>'
-            f'<div class="db-kpi-sub">words to review · {vocab_stats["total"]} total</div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- Main content: Finance | Food + Supplements ---
-    col_left, col_right = st.columns([1.1, 0.9])
-
-    # === LEFT: Finance ===
-    with col_left:
-        st.markdown('<div class="db-section-header">💰 Finance</div>', unsafe_allow_html=True)
-
-        if df_finance.empty:
-            st.info("No transactions yet.")
+    summary = get_daily_summary(today)
+    
+    if summary['total'] > 0:
+        pct = summary['percentage']
+        st.progress(pct / 100, text=f"{summary['taken']}/{summary['total']} taken ({pct:.0f}%)")
+        
+        missing = [e for e in summary['entries'] if e.get('taken') == 0]
+        if missing:
+            st.caption("⚠️ Missing today:")
+            for m in missing[:5]:
+                st.write(f"• {m['supplement_name']}")
+            if len(missing) > 5:
+                st.caption(f"... and {len(missing) - 5} more")
         else:
-            # Mini balance chart
-            from src.modules.finance.plots import create_river_chart
-            df_bal = df_finance.copy()
-            df_bal['Deposit']    = pd.to_numeric(df_bal['Deposit'], errors='coerce').fillna(0)
-            df_bal['Withdrawal'] = pd.to_numeric(df_bal['Withdrawal'], errors='coerce').fillna(0)
-            df_bal['Balance']    = (df_bal['Deposit'] - df_bal['Withdrawal']).cumsum()
+            st.success("✅ All supplements taken today!")
+    else:
+        st.info("No supplements logged today.")
+        if st.button("📋 Go to Supplements", use_container_width=True, key="go_supplements"):
+            st.session_state.current_page = 'supplements'
+            st.rerun()
 
-            fig = create_river_chart(df_bal)
-            if fig:
-                fig.update_layout(height=180, margin=dict(l=0, r=0, t=0, b=0),
-                                  showlegend=False, yaxis_title="")
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+def render_vocabulary_widget():
+    """Render the vocabulary summary widget."""
+    st.subheader("📚 Vocabulary")
+    
+    stats = get_stats()
+    
+    if stats['total'] > 0:
+        col_a, col_b = st.columns(2)
+        col_a.metric("📚 Words", stats['total'])
+        col_b.metric("🔄 Due for Review", stats['due'])
+        
+        if stats['by_level']:
+            st.caption("📊 Words by Level")
+            level_data = pd.DataFrame({
+                'Level': list(stats['by_level'].keys()),
+                'Count': list(stats['by_level'].values())
+            })
+            st.bar_chart(level_data.set_index('Level'))
+        
+        if st.button("📚 Go to Vocabulary", use_container_width=True, key="go_vocabulary"):
+            st.session_state.current_page = 'vocabulary'
+            st.rerun()
+    else:
+        st.info("No words in your vocabulary yet.")
+        if st.button("📚 Go to Vocabulary", use_container_width=True, key="go_vocabulary_empty"):
+            st.session_state.current_page = 'vocabulary'
+            st.rerun()
 
-            # Recent transactions
-            st.markdown('<div class="db-section-header" style="margin-top:12px;">Recent Transactions</div>', unsafe_allow_html=True)
-            df_recent = df_bal.sort_values('Date', ascending=False).head(5)
-            tx_rows = ""
-            for _, row in df_recent.iterrows():
-                date_str = pd.to_datetime(row['Date']).strftime('%b %d')
-                if row['Deposit'] > 0:
-                    amt_html = f'<span class="db-tx-pos">+{row["Deposit"]:,.2f} zł</span>'
-                else:
-                    amt_html = f'<span class="db-tx-neg">-{row["Withdrawal"]:,.2f} zł</span>'
-                tx_rows += (
-                    f'<div class="db-tx-row">'
-                    f'<span class="db-tx-date">{date_str}</span>'
-                    f'{amt_html}'
-                    f'</div>'
-                )
-            st.markdown(f'<div class="db-card" style="padding:12px 16px;">{tx_rows}</div>', unsafe_allow_html=True)
+def render_learning_widget():
+    """Render the learning summary widget."""
+    st.subheader("🎓 Learning")
+    
+    subjects = get_subjects()
+    total = len(subjects) if not subjects.empty else 0
+    active = len(subjects[subjects['status'] == 'In Progress']) if not subjects.empty else 0
+    streak = get_study_streak()
+    
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("📚 Subjects", total)
+    col_b.metric("🔄 Active", active)
+    col_c.metric("🔥 Streak", f"{streak} days")
+    
+    if total > 0:
+        if st.button("🎓 Go to Learning", use_container_width=True, key="go_learning"):
+            st.session_state.current_page = 'learning'
+            st.rerun()
+    else:
+        st.caption("No subjects yet. Start tracking your learning!")
 
-    # === RIGHT: Food + Supplements ===
-    with col_right:
-
-        # Supplements today
-        st.markdown('<div class="db-section-header">💊 Supplements Today</div>', unsafe_allow_html=True)
-        if supp_df.empty:
-            st.markdown('<div class="db-card"><span style="color:#64748b;">No supplement data.</span></div>', unsafe_allow_html=True)
-        else:
-            taken_names = set(supp_df[supp_df['taken'] == 1]['supplement_name'].tolist())
-            rows_html = ""
-            for s in DEFAULT_SUPPLEMENTS:
-                name = s['name']
-                taken = name in taken_names
-                icon  = "✅" if taken else "⬜"
-                color = "#f8fafc" if taken else "#64748b"
-                rows_html += f'<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #1e293b;"><span>{icon}</span><span style="color:{color};font-size:13px;">{name}</span></div>'
-            st.markdown(f'<div class="db-card" style="padding:12px 16px;">{rows_html}</div>', unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # --- Quick Actions ---
-    st.markdown('<div class="db-section-header">⚡ Quick Actions</div>', unsafe_allow_html=True)
-    q1, q2, q3, q4 = st.columns(4)
-    actions = [
-        (q1, "💰 Finance",     'finance'),
-        (q2, "💊 Supplements", 'supplements'),
-        (q3, "📚 Vocabulary",  'vocabulary'),
-        (q4, "🔄 Review Words",'vocabulary'),
-    ]
-    for col, label, page in actions:
-        with col:
-            if st.button(label, use_container_width=True, key=f"dash_{label}"):
-                st.session_state.current_page = page
-                st.rerun()
+def render_quick_actions():
+    """Render quick action buttons."""
+    st.subheader("⚡ Quick Actions")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("💰 Add Transaction", use_container_width=True):
+            st.session_state.current_page = 'finance'
+            st.rerun()
+    
+    with col2:
+        if st.button("📊 View Finance", use_container_width=True):
+            st.session_state.current_page = 'finance'
+            st.rerun()
+    
+    with col3:
+        if st.button("📚 Vocabulary", use_container_width=True):
+            st.session_state.current_page = 'vocabulary'
+            st.rerun()
+    
+    with col4:
+        if st.button("🎓 Learning", use_container_width=True):
+            st.session_state.current_page = 'learning'
+            st.rerun()

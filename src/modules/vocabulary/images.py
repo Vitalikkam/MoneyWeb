@@ -42,7 +42,7 @@ class ImageAPI:
             }
             
             print(f"🔍 Searching Pexels for: {word}")
-            response = requests.get(url, params=params, headers=self.headers, timeout=5)
+            response = requests.get(url, params=params, headers=self.headers, timeout=10)
             print(f"📡 Pexels response status: {response.status_code}")
             
             if response.status_code == 200:
@@ -68,14 +68,21 @@ class ImageAPI:
                             "photographer_url": photographer_url,
                             "alt": f"Image of {word} by {photographer}"
                         }
+                else:
+                    print(f"⚠️ No photos found for '{word}', using emoji fallback")
             else:
                 print(f"❌ Pexels API error: {response.status_code}")
                 if response.status_code == 401:
                     print("❌ Invalid Pexels API key!")
+                elif response.status_code == 429:
+                    print("❌ Pexels API rate limit exceeded!")
             
             # If API fails or no photos found, use emoji
             return {"url": None, "emoji": emoji, "source": "emoji"}
             
+        except requests.exceptions.Timeout:
+            print(f"⏰ Pexels API timeout for '{word}'")
+            return {"url": None, "emoji": emoji, "source": "emoji"}
         except Exception as e:
-            print(f"❌ Error fetching image: {e}")
+            print(f"❌ Error fetching image for '{word}': {e}")
             return {"url": None, "emoji": emoji, "source": "emoji"}

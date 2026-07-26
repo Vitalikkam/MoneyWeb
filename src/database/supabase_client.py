@@ -126,24 +126,24 @@ class SupabaseClient(DatabaseInterface):
         try:
             query = self.supabase.table("supplements").select("*")
             if start_date and end_date:
-                query = query.gte("Date", start_date).lte("Date", end_date)
+                query = query.gte("date", start_date).lte("date", end_date)
             elif start_date:
-                query = query.eq("Date", start_date)
+                query = query.eq("date", start_date)
             response = query.execute()
             data = response.data
             if not data:
                 return pd.DataFrame(columns=['id', 'Date', 'supplement_name', 'dosage', 'unit', 'taken'])
             df = pd.DataFrame(data)
-            df['Date'] = pd.to_datetime(df['Date']).dt.date
+            df['Date'] = pd.to_datetime(df['date']).dt.date
             return df
         except Exception as e:
             st.error(f"Error fetching supplements: {e}")
             return pd.DataFrame(columns=['id', 'Date', 'supplement_name', 'dosage', 'unit', 'taken'])
-    
+
     def add_supplement(self, date, supplement_name, dosage, unit):
         try:
             self.supabase.table("supplements").insert({
-                "Date": date,
+                "date": date,
                 "supplement_name": supplement_name,
                 "dosage": float(dosage),
                 "unit": unit
@@ -152,11 +152,11 @@ class SupabaseClient(DatabaseInterface):
         except Exception as e:
             st.error(f"Error adding supplement: {e}")
             return False
-    
+
     def set_supplement_taken(self, date, supplement_name, dosage, unit, taken):
         try:
             # Check if entry exists
-            response = self.supabase.table("supplements").select("id").eq("Date", date).eq("supplement_name", supplement_name).execute()
+            response = self.supabase.table("supplements").select("id").eq("date", date).eq("supplement_name", supplement_name).execute()
             
             if response.data:
                 # Update existing
@@ -164,11 +164,11 @@ class SupabaseClient(DatabaseInterface):
                     "taken": taken,
                     "dosage": float(dosage),
                     "unit": unit
-                }).eq("Date", date).eq("supplement_name", supplement_name).execute()
+                }).eq("date", date).eq("supplement_name", supplement_name).execute()
             else:
                 # Insert new
                 self.supabase.table("supplements").insert({
-                    "Date": date,
+                    "date": date,
                     "supplement_name": supplement_name,
                     "dosage": float(dosage),
                     "unit": unit,

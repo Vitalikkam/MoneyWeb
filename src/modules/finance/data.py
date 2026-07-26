@@ -3,42 +3,24 @@ import pandas as pd
 
 def get_all_transactions():
     """Get all transactions from the database."""
-    return db.get_transactions()
+    df = db.get_transactions()
+    # The database already returns columns with proper names from supabase_client
+    return df
 
 def add_transaction(date, deposit, withdrawal):
     """Add a new transaction."""
     return db.add_transaction(date, deposit, withdrawal)
 
 def save_dataframe(df):
-    """
-    Save a dataframe of transactions.
-    Handles both dataframes with and without 'id' column.
-    """
+    """Save a dataframe of transactions."""
     # If df has no 'id' column, treat all rows as new
     if 'id' not in df.columns:
-        # Check for duplicates before adding
-        existing = db.get_transactions()
-        
-        # Create a set of existing (Date, Deposit, Withdrawal) tuples
-        existing_set = set()
-        if not existing.empty:
-            for _, row in existing.iterrows():
-                existing_set.add((row['Date'], float(row['Deposit']), float(row['Withdrawal'])))
-        
-        # Only add rows that don't already exist
-        added = 0
         for _, row in df.iterrows():
-            key = (row['Date'], float(row['Deposit']), float(row['Withdrawal']))
-            if key not in existing_set:
-                db.add_transaction(
-                    row['Date'],
-                    float(row['Deposit']),
-                    float(row['Withdrawal'])
-                )
-                added += 1
-        
-        if added > 0:
-            print(f"Added {added} new transactions")
+            db.add_transaction(
+                row['Date'],
+                float(row['Deposit']),
+                float(row['Withdrawal'])
+            )
         return True
     
     # If df has 'id' column, update existing and add new
@@ -46,7 +28,7 @@ def save_dataframe(df):
     existing_ids = set(existing['id'].tolist()) if not existing.empty else set()
     new_ids = set(df['id'].tolist()) if not df.empty else set()
     
-    # Find deleted rows (in existing but not in new)
+    # Find deleted rows
     deleted_ids = existing_ids - new_ids
     for tx_id in deleted_ids:
         db.delete_transaction(tx_id)
@@ -54,7 +36,6 @@ def save_dataframe(df):
     # Update or insert each row
     for _, row in df.iterrows():
         if row['id'] in existing_ids:
-            # Update existing
             db.update_transaction(
                 row['id'],
                 row['Date'],
@@ -62,7 +43,6 @@ def save_dataframe(df):
                 float(row['Withdrawal'])
             )
         else:
-            # Insert new
             db.add_transaction(
                 row['Date'],
                 float(row['Deposit']),
@@ -77,17 +57,16 @@ def get_summary():
     df = db.get_transactions()
     if df.empty:
         return {"total_deposits": 0, "total_withdrawals": 0, "total_balance": 0}
+    # Use lowercase column names from Supabase
+    deposit_col = 'Deposit' if 'Deposit' in df.columns else 'deposit'
+    withdrawal_col = 'Withdrawal' if 'Withdrawal' in df.columns else 'withdrawal'
+    
+    total_deposits = df[deposit_col].sum()
+    total_withdrawals = df[withdrawal_col].sum()
+    total_balance = total_deposits - total_withdrawals
     return {
-        "total_deposits": df['Deposit'].sum(),
-        "total_withdrawals": df['Withdrawal'].sum(),
-        "total_balance": df['Deposit'].sum() - df['Withdrawal'].sum()
+        "total_deposits": total_deposits,
+        "total_withdrawals": total_withdrawals,
+        "total_balance": total_balance
     }
 
-def clear_all_data():
-    """Clear all transactions."""
-    df = db.get_transactions()
-    if df.empty:
-        return True
-    for _, row in df.iterrows():
-        db.delete_transaction(row['id'])
-    return True

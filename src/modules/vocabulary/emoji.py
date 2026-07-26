@@ -63,7 +63,6 @@ EMOJI_MAP = {
     "phone": "📱",
     "computer": "💻",
     "money": "💰",
-    "star": "⭐",
     "heart": "💖",
     "fire": "🔥",
     "light": "💡",
@@ -134,7 +133,7 @@ def get_emoji(word):
     if word_lower in EMOJI_MAP:
         return EMOJI_MAP[word_lower]
     
-    # Try partial match (e.g., "happiness" -> "happy")
+    # Try partial match
     for key, emoji in EMOJI_MAP.items():
         if key in word_lower or word_lower in key:
             return emoji

@@ -72,10 +72,6 @@ elif current_page == 'finance':
         render_kpi(df_balance)
         render_charts(df_balance)
 
-elif current_page == 'food':
-    # --- Food Page ---
-    from src.modules.food.ui import render_food_tracker
-    render_food_tracker()
 
 elif current_page == 'supplements':
     # --- Supplements Page ---
@@ -85,5 +81,9 @@ elif current_page == 'supplements':
 elif current_page == 'vocabulary':
     from src.modules.vocabulary.ui import render_vocabulary_tracker
     render_vocabulary_tracker()
+
+elif current_page == 'learning':
+    from src.modules.learning.ui import render_learning_tracker
+    render_learning_tracker()
 
 

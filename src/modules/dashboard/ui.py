@@ -9,17 +9,14 @@ from datetime import datetime
 def render_dashboard():
     """Main dashboard page."""
     from src.modules.finance.data import get_all_transactions, get_summary
-    from src.modules.food.data import get_daily_summary
     from src.modules.supplements.data import get_supplements
     from src.modules.supplements.config import DEFAULT_SUPPLEMENTS
     from src.modules.vocabulary.data import get_words_due_for_review, get_stats
-    from src.modules.food.ui import VITAMIN_GOALS
 
     rate = st.session_state.get('display_rate', 3.766)
     today = datetime.today().strftime('%Y-%m-%d')
 
     df_finance   = get_all_transactions()
-    food_summary = get_daily_summary()
     vocab_stats  = get_stats()
     due_words    = get_words_due_for_review()
 
@@ -47,7 +44,7 @@ def render_dashboard():
 </style>""", unsafe_allow_html=True)
 
     # --- Top KPI strip ---
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3  = st.columns(3)
 
     with k1:
         color = "#4ade80" if balance_pln >= 0 else "#f87171"
@@ -60,19 +57,8 @@ def render_dashboard():
             unsafe_allow_html=True
         )
 
-    with k2:
-        cal = food_summary.get('total_calories', 0)
-        cal_pct = min(cal / 3000 * 100, 100)
-        st.markdown(
-            f'<div class="db-card">'
-            f'<div class="db-card-title">🔥 Calories Today</div>'
-            f'<div class="db-kpi">{cal:.0f}</div>'
-            f'<div class="db-kpi-sub">/ 3000 kcal · {cal_pct:.0f}%</div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
 
-    with k3:
+    with k2:
         supp_color = "#4ade80" if supp_taken == supp_total else "#fbbf24" if supp_taken > 0 else "#94a3b8"
         st.markdown(
             f'<div class="db-card">'
@@ -83,7 +69,7 @@ def render_dashboard():
             unsafe_allow_html=True
         )
 
-    with k4:
+    with k3:
         due_count = len(due_words)
         due_color = "#f87171" if due_count > 0 else "#4ade80"
         st.markdown(
@@ -140,31 +126,6 @@ def render_dashboard():
 
     # === RIGHT: Food + Supplements ===
     with col_right:
-        # Food macros
-        st.markdown('<div class="db-section-header">🍽️ Today\'s Nutrition</div>', unsafe_allow_html=True)
-        if food_summary['meal_count'] == 0:
-            st.markdown('<div class="db-card"><span style="color:#64748b;">No meals logged today.</span></div>', unsafe_allow_html=True)
-        else:
-            macros = [
-                ("🔥 Calories", food_summary['total_calories'], 3000, "kcal"),
-                ("💪 Protein",  food_summary['total_protein'],  155,  "g"),
-                ("🍞 Carbs",    food_summary['total_carbs'],    350,  "g"),
-                ("🥑 Fat",      food_summary['total_fat'],      80,   "g"),
-            ]
-            for label, val, goal, unit in macros:
-                pct = min(val / goal, 1.0)
-                st.progress(pct, text=f"{label}: {val:.0f} / {goal} {unit}  ({pct*100:.0f}%)")
-
-            # Vitamins — only if any logged
-            has_vitamins = any(
-                food_summary.get(k, 0) > 0 for k in VITAMIN_GOALS
-            )
-            if has_vitamins:
-                with st.expander("🧬 Vitamins & Minerals"):
-                    from src.modules.food.ui import render_vitamin_progress
-                    render_vitamin_progress(food_summary)
-
-        st.markdown("<br>", unsafe_allow_html=True)
 
         # Supplements today
         st.markdown('<div class="db-section-header">💊 Supplements Today</div>', unsafe_allow_html=True)
@@ -185,13 +146,12 @@ def render_dashboard():
 
     # --- Quick Actions ---
     st.markdown('<div class="db-section-header">⚡ Quick Actions</div>', unsafe_allow_html=True)
-    q1, q2, q3, q4, q5 = st.columns(5)
+    q1, q2, q3, q4 = st.columns(4)
     actions = [
         (q1, "💰 Finance",     'finance'),
-        (q2, "🍽️ Log Meal",    'food'),
-        (q3, "💊 Supplements", 'supplements'),
-        (q4, "📚 Vocabulary",  'vocabulary'),
-        (q5, "🔄 Review Words",'vocabulary'),
+        (q2, "💊 Supplements", 'supplements'),
+        (q3, "📚 Vocabulary",  'vocabulary'),
+        (q4, "🔄 Review Words",'vocabulary'),
     ]
     for col, label, page in actions:
         with col:

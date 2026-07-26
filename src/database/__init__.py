@@ -1,3 +1,4 @@
+import os
 from .interface import DatabaseInterface
 from src.config import Config
 
@@ -28,7 +29,7 @@ class SQLiteClient:
         conn = self._get_connection()
         cursor = conn.cursor()
         
-        # Transactions table
+        # --- Transactions table ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,7 +39,7 @@ class SQLiteClient:
             )
         ''')
         
-        # Food entries table
+        # --- Food entries table ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS food_entries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,7 +62,7 @@ class SQLiteClient:
             )
         ''')
         
-        # Supplements table
+        # --- Supplements table ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS supplements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,8 +74,8 @@ class SQLiteClient:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-
-        # Vocabulary table
+        
+        # --- Vocabulary table ---
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS vocabulary (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,6 +91,49 @@ class SQLiteClient:
                 last_reviewed TEXT,
                 times_reviewed INTEGER DEFAULT 0,
                 next_review_date TEXT
+            )
+        ''')
+        
+        # --- Learning subjects table ---
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS learning_subjects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT,
+                priority TEXT,
+                goal TEXT,
+                status TEXT DEFAULT 'Not Started',
+                start_date TEXT,
+                target_date TEXT,
+                completion_percentage INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # --- Learning sessions table ---
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS learning_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER,
+                date TEXT NOT NULL,
+                duration INTEGER NOT NULL,
+                content TEXT,
+                notes TEXT,
+                rating INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (subject_id) REFERENCES learning_subjects(id)
+            )
+        ''')
+        
+        # --- Learning milestones table ---
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS learning_milestones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER,
+                name TEXT NOT NULL,
+                achieved_date TEXT,
+                notes TEXT,
+                FOREIGN KEY (subject_id) REFERENCES learning_subjects(id)
             )
         ''')
         
@@ -109,7 +153,6 @@ class SQLiteClient:
             params = [start_date, end_date]
         df = pd.read_sql_query(query, conn, params=params)
         conn.close()
-        # Convert Date to datetime
         if not df.empty and 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date']).dt.date
         return df
@@ -164,7 +207,6 @@ class SQLiteClient:
     def add_food_entry(self, date, meal_type, food_name, calories, protein=0, carbs=0, fat=0,
                        vitamin_a=0, vitamin_c=0, vitamin_d=0, calcium=0, iron=0,
                        magnesium=0, zinc=0, potassium=0):
-        """Add a food entry with vitamins and minerals."""
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -183,27 +225,22 @@ class SQLiteClient:
     # --- Supplement methods ---
     
     def get_supplements(self, start_date=None, end_date=None):
-        """Get supplements for a date range."""
         import sqlite3
         import pandas as pd
         conn = self._get_connection()
-        
         query = "SELECT * FROM supplements"
         params = []
-        
         if start_date and end_date:
             query += " WHERE Date BETWEEN ? AND ?"
             params = [start_date, end_date]
         elif start_date:
             query += " WHERE Date = ?"
             params = [start_date]
-        
         df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         return df
     
     def add_supplement(self, date, supplement_name, dosage, unit):
-        """Add a supplement entry."""
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -215,141 +252,231 @@ class SQLiteClient:
         return cursor.lastrowid
     
     def set_supplement_taken(self, date, supplement_name, dosage, unit, taken):
-        """Set supplement taken status (insert or update)."""
         conn = self._get_connection()
         cursor = conn.cursor()
-        
-        # Check if entry exists
         cursor.execute(
             "SELECT id FROM supplements WHERE Date = ? AND supplement_name = ?",
             (date, supplement_name)
         )
         result = cursor.fetchone()
-        
         if result:
-            # Update existing
             cursor.execute(
                 "UPDATE supplements SET taken = ?, dosage = ?, unit = ? WHERE Date = ? AND supplement_name = ?",
                 (taken, dosage, unit, date, supplement_name)
             )
         else:
-            # Insert new
             cursor.execute('''
                 INSERT INTO supplements (Date, supplement_name, dosage, unit, taken)
                 VALUES (?, ?, ?, ?, ?)
             ''', (date, supplement_name, dosage, unit, taken))
-        
         conn.commit()
         conn.close()
         return True
     
     def delete_supplement(self, id):
-        """Delete a supplement entry by ID."""
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM supplements WHERE id = ?", (id,))
         conn.commit()
         conn.close()
         return cursor.rowcount > 0
-
-    # --- Food entry delete ---
-
-    def delete_food_entry(self, id):
-        """Delete a food entry by ID."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM food_entries WHERE id = ?", (id,))
-        conn.commit()
-        conn.close()
-        return cursor.rowcount > 0
-
+    
     # --- Vocabulary methods ---
-
-    def get_vocabulary(self):
-        """Get all vocabulary words."""
+    
+    def get_vocabulary(self, word=None):
+        import sqlite3
         import pandas as pd
         conn = self._get_connection()
-        df = pd.read_sql_query("SELECT * FROM vocabulary ORDER BY word", conn)
+        if word:
+            df = pd.read_sql_query("SELECT * FROM vocabulary WHERE word = ?", conn, params=[word])
+        else:
+            df = pd.read_sql_query("SELECT * FROM vocabulary ORDER BY word", conn)
         conn.close()
         return df
-
-    def add_vocabulary(self, word, cefr_level, definition, example,
-                       translation=None, importance=3, category='general', mastery=4):
-        """Add a new vocabulary word."""
-        from datetime import datetime, timedelta
-        today = datetime.today().strftime('%Y-%m-%d')
-        next_review = (datetime.today() + timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    def add_vocabulary(self, word, cefr_level, definition, example_sentence, translation=None,
+                       importance=3, category="general", mastery=4, date_added=None, last_reviewed=None, next_review_date=None):
+        import datetime
         conn = self._get_connection()
         cursor = conn.cursor()
-        try:
-            cursor.execute('''
-                INSERT INTO vocabulary (
-                    word, cefr_level, definition, example_sentence, translation,
-                    importance, category, mastery, date_added, last_reviewed, next_review_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (word, cefr_level, definition, example, translation,
-                  importance, category, mastery, today, today, next_review))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            conn.close()
-            print(f"Error adding vocabulary: {e}")
-            return False
-
-    def update_vocabulary_review(self, word, mastery, next_review_date):
-        """Update review status for a word."""
-        from datetime import datetime
-        today = datetime.today().strftime('%Y-%m-%d')
+        today = datetime.datetime.today().strftime('%Y-%m-%d')
+        if not date_added:
+            date_added = today
+        if not last_reviewed:
+            last_reviewed = today
+        if not next_review_date:
+            next_review_date = (datetime.datetime.today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        cursor.execute('''
+            INSERT INTO vocabulary (
+                word, cefr_level, definition, example_sentence, translation,
+                importance, category, mastery, date_added, last_reviewed, next_review_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (word, cefr_level, definition, example_sentence, translation, importance, category, mastery, date_added, last_reviewed, next_review_date))
+        conn.commit()
+        conn.close()
+        return cursor.lastrowid
+    
+    def update_vocabulary_review(self, word, mastery):
+        import datetime
         conn = self._get_connection()
         cursor = conn.cursor()
+        today = datetime.datetime.today().strftime('%Y-%m-%d')
+        # Calculate next review date based on mastery
+        if mastery <= 2:
+            days_to_add = 30
+        elif mastery == 3:
+            days_to_add = 14
+        elif mastery == 4:
+            days_to_add = 7
+        else:
+            days_to_add = 3
+        next_review = (datetime.datetime.today() + datetime.timedelta(days=days_to_add)).strftime('%Y-%m-%d')
         cursor.execute('''
             UPDATE vocabulary
-            SET mastery = ?, last_reviewed = ?, next_review_date = ?,
+            SET mastery = ?,
+                last_reviewed = ?,
+                next_review_date = ?,
                 times_reviewed = times_reviewed + 1
             WHERE word = ?
-        ''', (mastery, today, next_review_date, word))
+        ''', (mastery, today, next_review, word))
         conn.commit()
         conn.close()
         return cursor.rowcount > 0
-
+    
     def delete_vocabulary(self, word):
-        """Delete a vocabulary word."""
         conn = self._get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM vocabulary WHERE word = ?", (word,))
         conn.commit()
         conn.close()
         return cursor.rowcount > 0
-
-    def word_exists(self, word):
-        """Check if a word already exists."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM vocabulary WHERE word = ?", (word,))
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count > 0
-
-    def get_vocabulary_due(self, date):
-        """Get vocabulary words due for review on or before a date."""
+    
+    # --- Learning methods ---
+    
+    def get_learning_subjects(self, status=None):
+        import sqlite3
         import pandas as pd
         conn = self._get_connection()
-        df = pd.read_sql_query(
-            "SELECT * FROM vocabulary WHERE next_review_date <= ? ORDER BY next_review_date",
-            conn, params=[date]
-        )
+        query = "SELECT * FROM learning_subjects"
+        if status:
+            query += f" WHERE status = '{status}'"
+        query += " ORDER BY name"
+        df = pd.read_sql_query(query, conn)
         conn.close()
         return df
+    
+    def add_learning_subject(self, name, category, priority, goal, status, start_date, target_date):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO learning_subjects (name, category, priority, goal, status, start_date, target_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (name, category, priority, goal, status, start_date, target_date))
+        conn.commit()
+        conn.close()
+        return cursor.lastrowid
+    
+    def update_learning_subject_status(self, subject_id, status):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE learning_subjects SET status = ? WHERE id = ?", (status, subject_id))
+        conn.commit()
+        conn.close()
+    
+    def update_learning_subject_progress(self, subject_id, percentage):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE learning_subjects SET completion_percentage = ? WHERE id = ?", (percentage, subject_id))
+        conn.commit()
+        conn.close()
+    
+    def delete_learning_subject(self, subject_id):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM learning_sessions WHERE subject_id = ?", (subject_id,))
+        cursor.execute("DELETE FROM learning_milestones WHERE subject_id = ?", (subject_id,))
+        cursor.execute("DELETE FROM learning_subjects WHERE id = ?", (subject_id,))
+        conn.commit()
+        conn.close()
+    
+    def get_learning_sessions(self, subject_id=None, days=None):
+        import sqlite3
+        import pandas as pd
+        from datetime import datetime, timedelta
+        conn = self._get_connection()
+        query = "SELECT * FROM learning_sessions"
+        params = []
+        conditions = []
+        if subject_id:
+            conditions.append("subject_id = ?")
+            params.append(subject_id)
+        if days:
+            date_limit = (datetime.today() - timedelta(days=days)).strftime('%Y-%m-%d')
+            conditions.append("date >= ?")
+            params.append(date_limit)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY date DESC"
+        df = pd.read_sql_query(query, conn, params=params)
+        conn.close()
+        return df
+    
+    def add_learning_session(self, subject_id, date, duration, content, notes, rating):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO learning_sessions (subject_id, date, duration, content, notes, rating)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (subject_id, date, duration, content, notes, rating))
+        conn.commit()
+        conn.close()
+        return cursor.lastrowid
+    
+    def delete_learning_session(self, session_id):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM learning_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+        conn.close()
+    
+    def get_learning_milestones(self, subject_id=None):
+        import sqlite3
+        import pandas as pd
+        conn = self._get_connection()
+        query = "SELECT * FROM learning_milestones"
+        if subject_id:
+            query += f" WHERE subject_id = {subject_id}"
+        query += " ORDER BY achieved_date DESC"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
+    
+    def add_learning_milestone(self, subject_id, name, achieved_date, notes):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO learning_milestones (subject_id, name, achieved_date, notes)
+            VALUES (?, ?, ?, ?)
+        ''', (subject_id, name, achieved_date, notes))
+        conn.commit()
+        conn.close()
+        return cursor.lastrowid
+    
+    def delete_learning_milestone(self, milestone_id):
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM learning_milestones WHERE id = ?", (milestone_id,))
+        conn.commit()
+        conn.close()
 
 def get_database():
     """Get the appropriate database client based on environment."""
     env = Config.get_env()
     if env == "prod":
-        # Import Supabase only when needed
         from .supabase_client import SupabaseClient
         return SupabaseClient()
     else:
-        return SQLiteClient("finances.db")
+        db_path = os.path.expanduser("~/Mycode/MymoneyWeb/MymoneyWeb/finances.db")
+        return SQLiteClient(db_path) 
 
 db = get_database()

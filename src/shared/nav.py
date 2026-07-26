@@ -14,9 +14,9 @@ def render_nav():
     pages = {
         'home':        {'icon': '🏠', 'label': 'Home'},
         'finance':     {'icon': '💰', 'label': 'Finance'},
-        'food':        {'icon': '🍽️', 'label': 'Food'},
         'supplements': {'icon': '💊', 'label': 'Supplements'},
         'vocabulary':  {'icon': '📚', 'label': 'Vocabulary'},
+        'learning': {'icon': '🎓', 'label': 'Learning'}
     }
 
     # Inject nav CSS — active page gets accent underline + brighter text

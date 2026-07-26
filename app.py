@@ -17,13 +17,12 @@ st.set_page_config(
 
 # --- Now everything else ---
 from src.shared.nav import render_nav
-from src.modules.finance.data import get_all_transactions, add_transaction, save_dataframe, delete_transaction, get_summary, clear_all_data
+from src.modules.finance.data import get_all_transactions, get_summary
 from src.shared.styles import apply_dark_theme
 from src.modules.finance.ui_header import render_header
 from src.modules.finance.ui_quick_add import render_quick_add
-from src.modules.finance.ui_table import render_table, render_kpi, get_data_with_balance
+from src.modules.finance.ui_table import render_table, render_kpi
 from src.modules.finance.ui_charts import render_charts
-from src.shared.currency import get_current_rate
 import pandas as pd
 
 apply_dark_theme()

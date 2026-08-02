@@ -100,9 +100,9 @@ def render_weekly_matrix(week_start):
         }
         for date in date_strings:
             if date in supplement_data and name in supplement_data[date]:
-                matrix_data[name]['days'].append(supplement_data[date][name]['taken'])
+                matrix_data[name]['days'].append(bool(supplement_data[date][name]['taken']))
             else:
-                matrix_data[name]['days'].append(0)
+                matrix_data[name]['days'].append(False)
     
     # Calculate daily totals
     daily_totals = []
@@ -110,7 +110,7 @@ def render_weekly_matrix(week_start):
         taken = 0
         total = len(DEFAULT_SUPPLEMENTS)
         for name in matrix_data:
-            if matrix_data[name]['days'][i] == 1:
+            if matrix_data[name]['days'][i]:
                 taken += 1
         daily_totals.append(f"{taken}/{total}")
     
@@ -197,7 +197,7 @@ def render_weekly_matrix(week_start):
             with cols[i + 1]:
                 date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
                 is_future = date_obj > today
-                current_value = supp_data['days'][i] == 1
+                current_value = bool(supp_data['days'][i])
                 dosage = supp_data['dosage']
                 unit = supp_data['unit']
                 

@@ -115,7 +115,7 @@ class DatabaseInterface(ABC):
         pass
 
     @abstractmethod
-    def add_exercise(self, date, workout_type, duration_minutes, notes, energy_level):
+    def add_exercise(self, date, workout_type, notes, energy_level):
         pass
 
     @abstractmethod

@@ -3,9 +3,9 @@ import pandas as pd
 from datetime import datetime
 
 
-def log_exercise(date, workout_type, duration_minutes, notes, energy_level):
+def log_exercise(date, workout_type, notes, energy_level):
     """Log a workout session."""
-    return db.add_exercise(date, workout_type, duration_minutes, notes, energy_level)
+    return db.add_exercise(date, workout_type, notes, energy_level)
 
 
 def get_exercises(days=None):

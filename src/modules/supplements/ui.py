@@ -224,10 +224,9 @@ def render_weekly_matrix(week_start):
                         disabled=False,
                         label_visibility="collapsed"
                     )
-                    
+
                     if new_value != current_value:
                         set_supplement_taken(date_str, supp_name, dosage, unit, new_value)
-                        st.rerun()
     
     # Daily totals row
     st.divider()

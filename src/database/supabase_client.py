@@ -405,12 +405,11 @@ class SupabaseClient(DatabaseInterface):
             st.error(f"Error fetching exercises: {e}")
             return pd.DataFrame(columns=['id', 'date', 'workout_type', 'duration_minutes', 'notes', 'energy_level', 'created_at'])
 
-    def add_exercise(self, date, workout_type, duration_minutes, notes, energy_level):
+    def add_exercise(self, date, workout_type, notes, energy_level):
         try:
             self.supabase.table("exercises").insert({
                 "date": date,
                 "workout_type": workout_type,
-                "duration_minutes": int(duration_minutes),
                 "notes": notes,
                 "energy_level": int(energy_level)
             }).execute()

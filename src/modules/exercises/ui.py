@@ -78,7 +78,6 @@ def render_log_tab():
         if log_exercise(
             date=date.strftime('%Y-%m-%d'),
             workout_type=final_type,
-            duration_minutes=0,
             notes=notes.strip() if notes else None,
             energy_level=energy
         ):

@@ -37,7 +37,8 @@ def _fetch_pexels_image(word: str, api_key: str):
 class ImageAPI:
     def __init__(self):
         try:
-            self.api_key = st.secrets.get("PEXELS_API_KEY", None)
+            # Try nested under [prod] section first (production), then fall back to top-level (dev)
+            self.api_key = st.secrets.get("prod", {}).get("PEXELS_API_KEY") or st.secrets.get("PEXELS_API_KEY", None)
         except Exception:
             self.api_key = None
 

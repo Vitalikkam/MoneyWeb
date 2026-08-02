@@ -338,16 +338,21 @@ def render_word_card(word_data):
         # Normalize protocol-relative URLs (e.g. //ssl.gstatic.com/... -> https://ssl.gstatic.com/...)
         if audio_url.startswith("//"):
             audio_url = "https:" + audio_url
+        print(f"🔊 Audio URL: {audio_url}")
         try:
             import requests as _req
             audio_response = _req.get(audio_url, timeout=5)
+            print(f"🔊 Audio response: {audio_response.status_code}")
             if audio_response.status_code == 200:
                 import io
                 st.audio(io.BytesIO(audio_response.content), format="audio/mpeg")
             else:
                 st.caption("🔇 Audio unavailable")
-        except Exception:
+        except Exception as e:
+            print(f"🔊 Audio error: {e}")
             st.caption("🔇 Audio unavailable")
+    else:
+        print(f"🔊 No audio URL for: {word_display}")
 
     # --- Styled action buttons ---
     st.markdown('<div class="wc-buttons">', unsafe_allow_html=True)

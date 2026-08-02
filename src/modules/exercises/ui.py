@@ -7,7 +7,6 @@ import pandas as pd
 from datetime import datetime
 from .data import log_exercise, get_exercises, delete_exercise, get_stats, get_streak
 
-# Workout types — free text is also allowed, these are quick-picks
 WORKOUT_TYPES = [
     "🏋️ Gym", "🏃 Run", "🚴 Cycling", "🧘 Yoga", "🥊 Boxing",
     "🏊 Swimming", "⚽ Football", "🏀 Basketball", "🚶 Walk", "💪 Home workout", "Other"
@@ -43,8 +42,6 @@ def render_exercise_tracker():
 
 def render_log_tab():
     """Quick workout logging form."""
-
-    # Streak badge at the top
     streak = get_streak()
     if streak > 0:
         st.markdown(
@@ -57,20 +54,14 @@ def render_log_tab():
     st.subheader("How was your workout?")
 
     with st.form("log_exercise_form", clear_on_submit=True):
-        # Date
         date = st.date_input("Date", value=datetime.today())
 
-        # Workout type — quick-pick chips via selectbox + free text option
         col1, col2 = st.columns(2)
         with col1:
             workout_type = st.selectbox("Type", WORKOUT_TYPES)
         with col2:
             custom_type = st.text_input("Or type your own", placeholder="e.g. Pilates")
 
-        # Duration
-        duration = st.slider("Duration (minutes)", min_value=5, max_value=180, value=45, step=5)
-
-        # Energy level
         energy = st.select_slider(
             "How did you feel?",
             options=[1, 2, 3, 4, 5],
@@ -78,7 +69,6 @@ def render_log_tab():
             format_func=lambda x: ENERGY_LABELS[x]
         )
 
-        # Notes
         notes = st.text_area("Notes (optional)", placeholder="What did you do? Any PRs? How was it?", max_chars=500)
 
         submitted = st.form_submit_button("✅ Log Workout", type="primary", use_container_width=True)
@@ -88,7 +78,7 @@ def render_log_tab():
         if log_exercise(
             date=date.strftime('%Y-%m-%d'),
             workout_type=final_type,
-            duration_minutes=duration,
+            duration_minutes=0,
             notes=notes.strip() if notes else None,
             energy_level=energy
         ):
@@ -97,7 +87,6 @@ def render_log_tab():
         else:
             st.error("Failed to save. Try again.")
 
-    # Show today's entry if it exists
     _render_today_summary()
 
 
@@ -107,7 +96,6 @@ def _render_today_summary():
     df = get_exercises(days=1)
     if df.empty:
         return
-
     today_df = df[pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d') == today]
     if today_df.empty:
         return
@@ -115,7 +103,7 @@ def _render_today_summary():
     st.divider()
     st.caption("Today's logged workout(s)")
     for _, row in today_df.iterrows():
-        _render_workout_row(row, show_date=False)
+        _render_workout_row(row, show_date=False, key_prefix="today")
 
 
 def render_history_tab():
@@ -127,7 +115,6 @@ def render_history_tab():
         st.info("No workouts logged yet. Go to 'Log Workout' to get started!")
         return
 
-    # Filters
     col1, col2 = st.columns(2)
     with col1:
         type_options = ["All"] + sorted(df['workout_type'].dropna().unique().tolist())
@@ -135,7 +122,6 @@ def render_history_tab():
     with col2:
         period = st.selectbox("Period", ["All time", "This week", "This month", "Last 30 days"])
 
-    # Apply filters
     filtered = df.copy()
     filtered['date_parsed'] = pd.to_datetime(filtered['date']).dt.date
     today = datetime.today().date()
@@ -160,7 +146,6 @@ def render_history_tab():
     st.caption(f"{len(filtered)} workout(s)")
     st.divider()
 
-    # Pagination
     PAGE_SIZE = 10
     total_pages = max(1, -(-len(filtered) // PAGE_SIZE))
     page = st.session_state.get('exercise_page', 1)
@@ -169,9 +154,8 @@ def render_history_tab():
     page_df = filtered.iloc[start:start + PAGE_SIZE]
 
     for _, row in page_df.iterrows():
-        _render_workout_row(row, show_date=True)
+        _render_workout_row(row, show_date=True, key_prefix="history")
 
-    # Page navigation
     if total_pages > 1:
         col_prev, col_mid, col_next = st.columns([1, 2, 1])
         with col_prev:
@@ -186,13 +170,11 @@ def render_history_tab():
                 st.rerun()
 
 
-def _render_workout_row(row, show_date=True):
+def _render_workout_row(row, show_date=True, key_prefix="ex"):
     """Render a single workout entry as a card row."""
     energy = int(row.get('energy_level', 3))
     energy_label = ENERGY_LABELS.get(energy, "")
-
     date_str = pd.to_datetime(row['date']).strftime('%a, %b %d') if show_date else ""
-    duration = row.get('duration_minutes', 0)
     workout_type = row.get('workout_type', 'Workout')
     notes = row.get('notes', '')
 
@@ -203,7 +185,6 @@ def _render_workout_row(row, show_date=True):
             f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
             f'<span style="font-size:17px;font-weight:600;color:#f8fafc;">{workout_type}</span>'
             f'<span style="display:flex;gap:10px;align-items:center;">'
-            f'<span style="color:#94a3b8;font-size:13px;">⏱️ {int(duration)} min</span>'
             f'<span style="color:#94a3b8;font-size:13px;">{energy_label}</span>'
             f'{"<span style=color:#64748b;font-size:12px;>" + date_str + "</span>" if date_str else ""}'
             f'</span>'
@@ -213,7 +194,8 @@ def _render_workout_row(row, show_date=True):
             unsafe_allow_html=True
         )
     with col_action:
-        if st.button("🗑️", key=f"del_ex_{row['id']}", help="Delete"):
+        # key_prefix ensures no collision between today summary and history list
+        if st.button("🗑️", key=f"{key_prefix}_del_{row['id']}", help="Delete"):
             if delete_exercise(row['id']):
                 st.rerun()
 
@@ -228,7 +210,6 @@ def render_stats_tab():
         st.info("Log some workouts to see your stats here!")
         return
 
-    # Top metrics
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("💪 Total Workouts", stats['total_workouts'])
     col2.metric("📅 This Week", stats['this_week'])
@@ -240,9 +221,6 @@ def render_stats_tab():
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.metric("⏱️ Avg Duration", f"{int(stats['avg_duration'])} min")
-
-        # Workouts by type
         if stats['by_type']:
             st.subheader("By type")
             type_df = pd.DataFrame({
@@ -252,7 +230,6 @@ def render_stats_tab():
             st.bar_chart(type_df.set_index('Type'))
 
     with col_right:
-        # Workouts per week (last 8 weeks)
         df = get_exercises(days=56)
         if not df.empty:
             st.subheader("Workouts per week")

@@ -60,7 +60,6 @@ def get_stats():
     this_week = len(df[df['date_parsed'] >= week_start])
     this_month = len(df[df['date_parsed'] >= month_start])
 
-    avg_duration = df['duration_minutes'].mean() if 'duration_minutes' in df.columns else 0
     by_type = df['workout_type'].value_counts().to_dict() if 'workout_type' in df.columns else {}
 
     return {
@@ -68,6 +67,5 @@ def get_stats():
         'this_week': this_week,
         'this_month': this_month,
         'streak': get_streak(),
-        'avg_duration': round(avg_duration, 0),
         'by_type': by_type,
     }

@@ -76,15 +76,16 @@ def render_weekly_matrix(week_start):
     from .data import get_supplements
     df = get_supplements(start_date, end_date)
     
-    # Create a lookup for quick access
+    # Create a lookup: date_string -> supplement_name -> {taken, dosage, unit}
     supplement_data = {}
     for _, row in df.iterrows():
-        date = row['Date']
+        # Use the raw string date column, not the parsed Date object
+        date_key = str(row['date'])[:10]
         name = row['supplement_name']
-        if date not in supplement_data:
-            supplement_data[date] = {}
-        supplement_data[date][name] = {
-            'taken': row['taken'],
+        if date_key not in supplement_data:
+            supplement_data[date_key] = {}
+        supplement_data[date_key][name] = {
+            'taken': bool(row['taken']),
             'dosage': row['dosage'],
             'unit': row['unit']
         }

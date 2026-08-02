@@ -16,7 +16,8 @@ def render_nav():
         'finance':     {'icon': '💰', 'label': 'Finance'},
         'supplements': {'icon': '💊', 'label': 'Supplements'},
         'vocabulary':  {'icon': '📚', 'label': 'Vocabulary'},
-        'learning': {'icon': '🎓', 'label': 'Learning'}
+        'learning':    {'icon': '🎓', 'label': 'Learning'},
+        'exercises':   {'icon': '🏋️', 'label': 'Exercise'},
     }
 
     # Inject nav CSS — active page gets accent underline + brighter text

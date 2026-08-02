@@ -385,3 +385,44 @@ class SupabaseClient(DatabaseInterface):
         except Exception as e:
             st.error(f"Error deleting learning milestone: {e}")
             return False
+
+    # ============================================
+    # EXERCISE METHODS
+    # ============================================
+
+    def get_exercises(self, days=None):
+        try:
+            query = self.supabase.table("exercises").select("*")
+            if days:
+                date_limit = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+                query = query.gte("date", date_limit)
+            response = query.order("date", desc=True).execute()
+            data = response.data
+            if not data:
+                return pd.DataFrame(columns=['id', 'date', 'workout_type', 'duration_minutes', 'notes', 'energy_level', 'created_at'])
+            return pd.DataFrame(data)
+        except Exception as e:
+            st.error(f"Error fetching exercises: {e}")
+            return pd.DataFrame(columns=['id', 'date', 'workout_type', 'duration_minutes', 'notes', 'energy_level', 'created_at'])
+
+    def add_exercise(self, date, workout_type, duration_minutes, notes, energy_level):
+        try:
+            self.supabase.table("exercises").insert({
+                "date": date,
+                "workout_type": workout_type,
+                "duration_minutes": int(duration_minutes),
+                "notes": notes,
+                "energy_level": int(energy_level)
+            }).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error adding exercise: {e}")
+            return False
+
+    def delete_exercise(self, exercise_id):
+        try:
+            self.supabase.table("exercises").delete().eq("id", exercise_id).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error deleting exercise: {e}")
+            return False

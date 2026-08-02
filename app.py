@@ -95,6 +95,11 @@ elif current_page == 'learning':
     from src.modules.learning.ui import render_learning_tracker
     render_learning_tracker()
 
+elif current_page == 'exercises':
+    # --- Exercises Page ---
+    from src.modules.exercises.ui import render_exercise_tracker
+    render_exercise_tracker()
+
 elif current_page == 'insights':
     # --- Insights Page (Coming Soon) ---
     st.title("📊 Insights")

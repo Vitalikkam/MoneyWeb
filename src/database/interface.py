@@ -108,3 +108,16 @@ class DatabaseInterface(ABC):
     @abstractmethod
     def delete_learning_milestone(self, milestone_id):
         pass
+
+    # --- Exercise methods ---
+    @abstractmethod
+    def get_exercises(self, days=None):
+        pass
+
+    @abstractmethod
+    def add_exercise(self, date, workout_type, duration_minutes, notes, energy_level):
+        pass
+
+    @abstractmethod
+    def delete_exercise(self, exercise_id):
+        pass

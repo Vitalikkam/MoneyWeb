@@ -1,358 +1,403 @@
 #!/usr/bin/env python3
 """
-MCP Server for the Learning Module.
-Exposes study tracking tools, resources, and prompts to AI assistants like Claude.
+Life Dashboard MCP Server
+Covers: Learning, Exercises, Vocabulary, Supplements
 """
 
 import sys
 import os
-import json
 from datetime import datetime, timedelta
-from typing import Optional
 
-# Add project root to path so we can import modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Force production DB
+os.environ["APP_ENV"] = "prod"
+
 from mcp.server.fastmcp import FastMCP
-from src.modules.learning.data import (
-    get_subjects,
-    get_subject,
-    get_sessions,
-    get_total_hours,
-    get_study_streak,
-    add_session,
-    add_subject,
-    add_milestone,
-    get_milestones,
-    update_subject_status,
-    update_subject_progress,
-    delete_session,
-    delete_subject,
-)
 
-# Initialize MCP server
-mcp = FastMCP("Learning Tracker")
+mcp = FastMCP("Life Dashboard")
 
-# ============================================
-# TOOLS (Actions the AI can perform)
-# ============================================
+
+# ─────────────────────────────────────────────────────────────
+# LEARNING
+# ─────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def add_study_session(subject_name: str, duration: int, content: str = "", rating: int = 3) -> str:
+def log_study_session(subject_name: str, duration: int, content: str = "", rating: int = 3) -> str:
     """
-    Log a study session for a subject.
-    
+    Log a study session.
+
     Args:
-        subject_name: Name of the subject (e.g., "Machine Learning")
+        subject_name: Name of the subject (e.g. "Machine Learning")
         duration: Duration in minutes
-        content: What was studied (e.g., "Chapter 3: Neural Networks")
-        rating: Rating 1-5 (1=low, 5=high)
+        content: What you studied (e.g. "Chapter 5 — backprop")
+        rating: How productive it felt, 1–5
     """
-    # Find the subject by name
+    from src.modules.learning.data import get_subjects, add_session
     subjects = get_subjects()
-    subject_row = subjects[subjects['name'].str.lower() == subject_name.lower()]
-    
-    if subject_row.empty:
-        return f"❌ Subject '{subject_name}' not found. Please add it first using add_subject."
-    
-    subject_id = subject_row.iloc[0]['id']
-    
-    # Add the session
-    session_id = add_session(
-        subject_id=subject_id,
-        duration=duration,
-        content=content if content else None,
-        rating=rating
-    )
-    
-    if session_id:
-        return f"✅ Logged {duration}min study session for '{subject_name}' ({content if content else 'General study'}) with rating {rating}/5"
-    else:
-        return "❌ Failed to log session. Please try again."
+    match = subjects[subjects['name'].str.lower() == subject_name.lower()]
+    if match.empty:
+        # fuzzy — try contains
+        match = subjects[subjects['name'].str.lower().str.contains(subject_name.lower())]
+    if match.empty:
+        names = subjects['name'].tolist()
+        return f"❌ Subject '{subject_name}' not found. Available: {names}"
+    subject_id = match.iloc[0]['id']
+    add_session(subject_id=subject_id, duration=duration, content=content or None, rating=rating)
+    return f"✅ Logged {duration}min on '{match.iloc[0]['name']}'" + (f" — {content}" if content else "") + f" (rating {rating}/5)"
+
 
 @mcp.tool()
-def add_subject_tool(name: str, category: str = "", priority: str = "Medium", goal: str = "") -> str:
+def add_learning_subject(name: str, category: str = "", priority: str = "Medium", goal: str = "") -> str:
     """
-    Add a new learning subject.
-    
+    Add a new learning subject / quest.
+
     Args:
-        name: Name of the subject (e.g., "Machine Learning")
-        category: Category (e.g., "Course", "Book", "Language")
-        priority: High, Medium, or Low
+        name: Subject name
+        category: e.g. Course, Book, Language
+        priority: High / Medium / Low
         goal: What you want to achieve
     """
-    try:
-        subject_id = add_subject(
-            name=name,
-            category=category if category else None,
-            priority=priority,
-            goal=goal if goal else None,
-            status="Not Started"
-        )
-        return f"✅ Added subject '{name}' with ID {subject_id}"
-    except Exception as e:
-        return f"❌ Failed to add subject: {e}"
+    from src.modules.learning.data import add_subject
+    add_subject(name=name, category=category or None, priority=priority, goal=goal or None)
+    return f"✅ Added subject '{name}'"
+
 
 @mcp.tool()
-def get_study_summary(subject_name: str = "") -> str:
-    """
-    Get study summary for a specific subject or all subjects.
-    
-    Args:
-        subject_name: Name of the subject (leave empty for all subjects)
-    """
-    if subject_name:
-        subjects = get_subjects()
-        subject_row = subjects[subjects['name'].str.lower() == subject_name.lower()]
-        
-        if subject_row.empty:
-            return f"❌ Subject '{subject_name}' not found."
-        
-        subject = subject_row.iloc[0]
-        subject_id = subject['id']
-        total_hours = get_total_hours(subject_id)
-        sessions = get_sessions(subject_id)
-        session_count = len(sessions)
-        streak = get_study_streak()
-        
-        return f"""
-📊 Study Summary for: {subject['name']}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 Status: {subject['status']}
-📈 Progress: {subject['completion_percentage'] or 0}%
-⏱️ Total Hours: {total_hours}h
-📝 Sessions: {session_count}
-🔥 Streak: {streak} days
-"""
-    else:
-        # All subjects summary
-        subjects = get_subjects()
-        if subjects.empty:
-            return "No subjects found. Add your first subject using add_subject_tool."
-        
-        total_subjects = len(subjects)
-        active = len(subjects[subjects['status'] == 'In Progress'])
-        completed = len(subjects[subjects['status'] == 'Completed'])
-        
-        # Calculate total hours across all subjects
-        total_hours = 0
-        for _, row in subjects.iterrows():
-            total_hours += get_total_hours(row['id'])
-        
-        streak = get_study_streak()
-        
-        result = f"""
-📊 Study Summary (All Subjects)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📚 Total Subjects: {total_subjects}
-🔄 In Progress: {active}
-✅ Completed: {completed}
-⏱️ Total Hours: {total_hours:.1f}h
-🔥 Streak: {streak} days
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-"""
-        return result
-
-@mcp.tool()
-def get_weekly_report() -> str:
-    """
-    Get a weekly study report with insights.
-    """
-    # Get sessions from the last 7 days
-    import pandas as pd
-    sessions = get_sessions(days=7)
-    
-    if sessions.empty:
-        return "📊 No study activity in the last 7 days. Time to get started!"
-    
-    # Group by subject
+def get_learning_summary() -> str:
+    """Get an overview of all learning subjects and recent activity."""
+    from src.modules.learning.data import get_subjects, get_sessions, get_total_hours, get_study_streak
     subjects = get_subjects()
-    subject_names = {row['id']: row['name'] for _, row in subjects.iterrows()}
-    
-    # Calculate stats
-    total_minutes = sessions['duration'].sum()
-    total_hours = total_minutes / 60
-    session_count = len(sessions)
-    
-    # Group by subject
-    subject_totals = sessions.groupby('subject_id')['duration'].sum().sort_values(ascending=False)
-    
-    result = f"""
-📅 Weekly Study Report
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📝 Total Sessions: {session_count}
-⏱️ Total Time: {total_hours:.1f}h ({total_minutes:.0f} min)
-
-Top Subjects:
-"""
-    
-    for subject_id, minutes in subject_totals.head(5).items():
-        name = subject_names.get(subject_id, "Unknown")
-        hours = minutes / 60
-        result += f"  • {name}: {hours:.1f}h\n"
-    
-    # Calculate best day
-    sessions['day'] = pd.to_datetime(sessions['date']).dt.strftime('%A')
-    best_day = sessions.groupby('day')['duration'].sum().sort_values(ascending=False)
-    if not best_day.empty:
-        result += f"\n🏆 Best Day: {best_day.index[0]} ({best_day.iloc[0]} min)"
-    
-    # Check streak
     streak = get_study_streak()
-    if streak > 0:
-        result += f"\n🔥 Current Streak: {streak} days"
-    
-    return result
+    sessions = get_sessions(days=7)
+    week_count = len(sessions)
+    week_min = int(sessions['duration'].sum()) if not sessions.empty else 0
+
+    lines = [f"🔥 Streak: {streak} days | 📅 This week: {week_count} sessions ({week_min} min)\n"]
+    if subjects.empty:
+        lines.append("No subjects yet.")
+    else:
+        for _, s in subjects.iterrows():
+            h = get_total_hours(s['id'])
+            p = int(s.get('completion_percentage') or 0)
+            lines.append(f"  • {s['name']} [{s['status']}] — {p}% · {h}h total")
+    return "\n".join(lines)
+
 
 @mcp.tool()
-def add_milestone_tool(subject_name: str, milestone_name: str, notes: str = "") -> str:
+def update_learning_progress(subject_name: str, percentage: int) -> str:
+    """
+    Update completion percentage for a subject.
+
+    Args:
+        subject_name: Subject name
+        percentage: 0–100
+    """
+    from src.modules.learning.data import get_subjects, update_subject_progress
+    subjects = get_subjects()
+    match = subjects[subjects['name'].str.lower().str.contains(subject_name.lower())]
+    if match.empty:
+        return f"❌ Subject '{subject_name}' not found."
+    update_subject_progress(match.iloc[0]['id'], percentage)
+    return f"✅ Set '{match.iloc[0]['name']}' to {percentage}%"
+
+
+@mcp.tool()
+def add_learning_milestone(subject_name: str, milestone: str, notes: str = "") -> str:
     """
     Add a milestone for a subject.
-    
+
     Args:
-        subject_name: Name of the subject
-        milestone_name: Name of the milestone (e.g., "Finished Chapter 3")
-        notes: Additional notes about the milestone
+        subject_name: Subject name
+        milestone: e.g. "Finished Part 1"
+        notes: Optional notes
     """
+    from src.modules.learning.data import get_subjects, add_milestone
     subjects = get_subjects()
-    subject_row = subjects[subjects['name'].str.lower() == subject_name.lower()]
-    
-    if subject_row.empty:
+    match = subjects[subjects['name'].str.lower().str.contains(subject_name.lower())]
+    if match.empty:
         return f"❌ Subject '{subject_name}' not found."
-    
-    subject_id = subject_row.iloc[0]['id']
-    
-    try:
-        milestone_id = add_milestone(subject_id, milestone_name, notes if notes else None)
-        return f"✅ Added milestone '{milestone_name}' for '{subject_name}'"
-    except Exception as e:
-        return f"❌ Failed to add milestone: {e}"
+    add_milestone(match.iloc[0]['id'], milestone, notes or None)
+    return f"✅ Milestone '{milestone}' added to '{match.iloc[0]['name']}'"
+
+
+# ─────────────────────────────────────────────────────────────
+# EXERCISES
+# ─────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def update_subject_status_tool(subject_name: str, status: str) -> str:
+def log_workout(workout_type: str, energy_level: int = 3, notes: str = "", date: str = "") -> str:
     """
-    Update the status of a subject.
-    
+    Log a workout. Call this when the user mentions exercising, going to the gym, running, etc.
+
     Args:
-        subject_name: Name of the subject
-        status: One of: "Not Started", "In Progress", "Completed", "On Hold"
+        workout_type: e.g. "Gym", "Run", "Yoga", "Cycling", "Walk", "Boxing", "Home workout"
+        energy_level: How they felt, 1 (exhausted) to 5 (amazing)
+        notes: What they did, any details
+        date: YYYY-MM-DD, defaults to today
     """
-    valid_statuses = ["Not Started", "In Progress", "Completed", "On Hold"]
-    if status not in valid_statuses:
-        return f"❌ Invalid status. Choose from: {', '.join(valid_statuses)}"
-    
-    subjects = get_subjects()
-    subject_row = subjects[subjects['name'].str.lower() == subject_name.lower()]
-    
-    if subject_row.empty:
-        return f"❌ Subject '{subject_name}' not found."
-    
-    subject_id = subject_row.iloc[0]['id']
-    
-    try:
-        update_subject_status(subject_id, status)
-        return f"✅ Updated '{subject_name}' status to '{status}'"
-    except Exception as e:
-        return f"❌ Failed to update status: {e}"
+    from src.modules.exercises.data import log_exercise
+    d = date if date else datetime.today().strftime('%Y-%m-%d')
+    log_exercise(date=d, workout_type=workout_type, notes=notes or None, energy_level=energy_level)
+    energy_labels = {1: "😴 Exhausted", 2: "😐 Low", 3: "🙂 Normal", 4: "😊 Good", 5: "🔥 Amazing"}
+    return f"✅ Logged {workout_type} on {d} — {energy_labels.get(energy_level, '')}" + (f" | {notes}" if notes else "")
 
-# ============================================
-# RESOURCES (Read-only data)
-# ============================================
 
-@mcp.resource("subjects://active")
-def get_active_subjects() -> str:
-    """Get all active (In Progress) subjects."""
-    subjects = get_subjects("In Progress")
-    if subjects.empty:
-        return "No active subjects."
-    
-    result = "📚 Active Subjects:\n"
-    for _, row in subjects.iterrows():
-        hours = get_total_hours(row['id'])
-        progress = row['completion_percentage'] or 0
-        result += f"  • {row['name']}: {progress}% complete, {hours}h studied\n"
-    
-    return result
+@mcp.tool()
+def get_exercise_summary() -> str:
+    """Get workout stats: streak, this week, this month, recent workouts."""
+    from src.modules.exercises.data import get_stats, get_exercises
+    stats = get_stats()
+    recent = get_exercises(days=7)
 
-@mcp.resource("streak://current")
-def get_streak_resource() -> str:
-    """Get the current study streak."""
+    lines = [
+        f"💪 Total: {stats['total_workouts']} workouts",
+        f"📅 This week: {stats['this_week']} | 🗓️ This month: {stats['this_month']}",
+        f"🔥 Streak: {stats['streak']} days",
+    ]
+    if not recent.empty:
+        lines.append("\nRecent workouts:")
+        for _, row in recent.head(5).iterrows():
+            d = str(row['date'])[:10]
+            lines.append(f"  • {row['workout_type']} on {d}" + (f" — {row['notes']}" if row.get('notes') else ""))
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────
+# VOCABULARY
+# ─────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def add_word(word: str, definition: str, cefr_level: str = "C1",
+             example: str = "", translation: str = "") -> str:
+    """
+    Add a word to vocabulary.
+
+    Args:
+        word: The English word
+        definition: Its definition
+        cefr_level: B2 / C1 / C2
+        example: Example sentence
+        translation: Russian translation
+    """
+    from src.modules.vocabulary.data import add_vocabulary, word_exists
+    w = word.lower().strip()
+    if word_exists(w):
+        return f"⚠️ '{w}' is already in your vocabulary."
+    add_vocabulary(
+        word=w,
+        cefr_level=cefr_level,
+        definition=definition,
+        example=example or "",
+        translation=translation or None,
+        importance=3,
+        category="manual",
+        mastery=3
+    )
+    return f"✅ Added '{w}' ({cefr_level})" + (f" — {translation}" if translation else "")
+
+
+@mcp.tool()
+def lookup_and_add_word(word: str) -> str:
+    """
+    Fetch word data from dictionary API and add it to vocabulary automatically.
+    Use this when user mentions a word they want to learn.
+
+    Args:
+        word: The English word to look up and add
+    """
+    from src.modules.vocabulary.api import VocabularyAPI
+    from src.modules.vocabulary.data import add_vocabulary, word_exists
+    w = word.lower().strip()
+    if word_exists(w):
+        return f"⚠️ '{w}' is already in your vocabulary."
+    api = VocabularyAPI()
+    data = api.get_word_data(w)
+    if not data.get('found'):
+        return f"⚠️ '{w}' not found in dictionary. Use add_word with a manual definition."
+    add_vocabulary(
+        word=w,
+        cefr_level=data.get('cefr_level') or 'C1',
+        definition=data.get('definition', ''),
+        example=data.get('example', ''),
+        translation=data.get('translation'),
+        importance=3,
+        category="manual",
+        mastery=3
+    )
+    return (
+        f"✅ Added '{w}' ({data.get('cefr_level', 'C1')})\n"
+        f"📖 {data.get('definition', '')}\n"
+        + (f"🇷🇺 {data.get('translation')}" if data.get('translation') else "")
+    )
+
+
+@mcp.tool()
+def get_vocabulary_summary() -> str:
+    """Get vocabulary stats and words due for review."""
+    from src.modules.vocabulary.data import get_stats, get_words_due_for_review
+    stats = get_stats()
+    due = get_words_due_for_review()
+    lines = [
+        f"📚 Total words: {stats['total']}",
+        f"🔄 Due for review: {stats['due']}",
+        f"⭐ Avg mastery: {stats['avg_mastery']}/5",
+    ]
+    if stats['by_level']:
+        lines.append("By level: " + " | ".join(f"{k}: {v}" for k, v in stats['by_level'].items()))
+    if not due.empty:
+        lines.append(f"\nWords to review: {', '.join(due['word'].head(10).tolist())}")
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────
+# SUPPLEMENTS
+# ─────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def log_supplement(supplement_name: str, taken: bool = True, date: str = "") -> str:
+    """
+    Mark a supplement as taken or not taken.
+
+    Args:
+        supplement_name: e.g. "Vitamin D", "Magnesium", "Omega 3"
+        taken: True = taken, False = not taken
+        date: YYYY-MM-DD, defaults to today
+    """
+    from src.modules.supplements.data import set_supplement_taken
+    from src.modules.supplements.config import DEFAULT_SUPPLEMENTS, get_supplement_dosage
+    d = date if date else datetime.today().strftime('%Y-%m-%d')
+
+    # Find matching supplement (fuzzy)
+    name_match = None
+    for s in DEFAULT_SUPPLEMENTS:
+        if supplement_name.lower() in s['name'].lower() or s['name'].lower() in supplement_name.lower():
+            name_match = s
+            break
+
+    if not name_match:
+        available = [s['name'] for s in DEFAULT_SUPPLEMENTS]
+        return f"❌ '{supplement_name}' not found. Available: {available}"
+
+    set_supplement_taken(d, name_match['name'], name_match['dosage'], name_match['unit'], taken)
+    status = "✅ taken" if taken else "❌ not taken"
+    return f"{status}: {name_match['name']} ({name_match['dosage']}{name_match['unit']}) on {d}"
+
+
+@mcp.tool()
+def log_all_supplements(taken: bool = True, date: str = "") -> str:
+    """
+    Mark all supplements as taken (or not taken) for a given day.
+    Use when user says "took all my supplements" or "took my pills".
+
+    Args:
+        taken: True = all taken, False = none taken
+        date: YYYY-MM-DD, defaults to today
+    """
+    from src.modules.supplements.data import set_supplement_taken
+    from src.modules.supplements.config import DEFAULT_SUPPLEMENTS
+    d = date if date else datetime.today().strftime('%Y-%m-%d')
+    for s in DEFAULT_SUPPLEMENTS:
+        set_supplement_taken(d, s['name'], s['dosage'], s['unit'], taken)
+    status = "✅ All supplements marked as taken" if taken else "❌ All supplements marked as not taken"
+    return f"{status} for {d}"
+
+
+@mcp.tool()
+def get_supplement_status(date: str = "") -> str:
+    """
+    Get supplement status for a given day.
+
+    Args:
+        date: YYYY-MM-DD, defaults to today
+    """
+    from src.modules.supplements.data import get_supplements_for_date
+    from src.modules.supplements.config import DEFAULT_SUPPLEMENTS
+    d = date if date else datetime.today().strftime('%Y-%m-%d')
+    df = get_supplements_for_date(d)
+
+    taken_names = set()
+    if not df.empty:
+        taken_names = set(df[df['taken'] == True]['supplement_name'].tolist()) | \
+                      set(df[df['taken'] == 1]['supplement_name'].tolist())
+
+    lines = [f"💊 Supplements for {d}:"]
+    for s in DEFAULT_SUPPLEMENTS:
+        icon = "✅" if s['name'] in taken_names else "⬜"
+        lines.append(f"  {icon} {s['name']} ({s['dosage']}{s['unit']})")
+
+    total = len(DEFAULT_SUPPLEMENTS)
+    done = len(taken_names)
+    lines.append(f"\n{done}/{total} taken")
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────
+# DAILY OVERVIEW
+# ─────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def get_daily_overview(date: str = "") -> str:
+    """
+    Get a full overview of today's activity across all modules.
+    Great for a morning check-in or evening recap.
+
+    Args:
+        date: YYYY-MM-DD, defaults to today
+    """
+    from src.modules.exercises.data import get_exercises
+    from src.modules.learning.data import get_sessions, get_study_streak
+    from src.modules.supplements.data import get_supplements_for_date
+    from src.modules.supplements.config import DEFAULT_SUPPLEMENTS
+
+    d = date if date else datetime.today().strftime('%Y-%m-%d')
+    lines = [f"📊 Daily Overview — {d}\n{'─'*36}"]
+
+    # Supplements
+    supp_df = get_supplements_for_date(d)
+    taken_names = set()
+    if not supp_df.empty:
+        taken_names = set(supp_df[supp_df['taken'] == True]['supplement_name'].tolist()) | \
+                      set(supp_df[supp_df['taken'] == 1]['supplement_name'].tolist())
+    total_s = len(DEFAULT_SUPPLEMENTS)
+    done_s = len(taken_names)
+    lines.append(f"💊 Supplements: {done_s}/{total_s} taken")
+
+    # Exercise
+    ex_df = get_exercises(days=1)
+    if not ex_df.empty:
+        today_ex = ex_df[ex_df['date'].astype(str).str[:10] == d]
+        if not today_ex.empty:
+            types = ", ".join(today_ex['workout_type'].tolist())
+            lines.append(f"🏋️ Workout: {types}")
+        else:
+            lines.append("🏋️ Workout: none logged")
+    else:
+        lines.append("🏋️ Workout: none logged")
+
+    # Learning
     streak = get_study_streak()
-    return f"🔥 Current streak: {streak} days"
+    sessions_today = get_sessions(days=1)
+    if not sessions_today.empty:
+        today_sess = sessions_today[sessions_today['date'].astype(str).str[:10] == d]
+        if not today_sess.empty:
+            total_min = int(today_sess['duration'].sum())
+            lines.append(f"📚 Study: {len(today_sess)} session(s), {total_min} min")
+        else:
+            lines.append("📚 Study: none logged")
+    else:
+        lines.append("📚 Study: none logged")
 
-@mcp.resource("milestones://recent")
-def get_recent_milestones() -> str:
-    """Get recent milestones."""
-    milestones = get_milestones()
-    if milestones.empty:
-        return "No milestones yet."
-    
-    result = "🏆 Recent Milestones:\n"
-    for _, row in milestones.head(5).iterrows():
-        subject = get_subject(row['subject_id'])
-        subject_name = subject['name'] if subject is not None else "Unknown"
-        result += f"  • {row['name']} ({subject_name}) - {row['achieved_date']}\n"
-    
-    return result
+    lines.append(f"🔥 Study streak: {streak} days")
+    return "\n".join(lines)
 
-# ============================================
-# PROMPTS (Reusable templates)
-# ============================================
 
-@mcp.prompt()
-def weekly_review_prompt() -> str:
-    """Generate a prompt for a weekly study review."""
-    return """
-Please review my study activity for the past week and give me insights.
-
-I want to know:
-1. Which subjects I studied the most
-2. How consistent I've been
-3. Areas where I need to improve
-4. Suggestions for next week
-
-Use the get_weekly_report tool to get the data first.
-"""
-
-@mcp.prompt()
-def daily_check_in() -> str:
-    """Generate a prompt for a daily check-in."""
-    return """
-Check in on my daily learning progress.
-
-1. What subjects should I focus on today?
-2. Am I on track with my goals?
-3. What should I study next?
-
-Use the get_study_summary tool to see my current progress.
-"""
-
-@mcp.prompt()
-def goal_setting() -> str:
-    """Generate a prompt for setting new learning goals."""
-    return """
-Help me set new learning goals for the next month.
-
-I want to:
-1. Set realistic study targets
-2. Plan my weekly schedule
-3. Identify milestones to track
-
-Use the get_study_summary tool to understand my current progress first.
-"""
-
-# ============================================
-# RUN THE SERVER
-# ============================================
+# ─────────────────────────────────────────────────────────────
+# RUN
+# ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("🎓 Learning Tracker MCP Server")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("📚 Tools: add_study_session, add_subject_tool, get_study_summary")
-    print("📊 Resources: subjects://active, streak://current, milestones://recent")
-    print("📝 Prompts: weekly_review_prompt, daily_check_in, goal_setting")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("Waiting for connections...")
+    print("🚀 Life Dashboard MCP Server", file=sys.stderr)
+    print("Tools: log_workout, log_study_session, log_supplement, log_all_supplements,", file=sys.stderr)
+    print("       add_word, lookup_and_add_word, get_daily_overview, and more", file=sys.stderr)
     mcp.run(transport="stdio")
-    print(f"Working directory: {os.getcwd()}", file=sys.stderr)
-    print(f"Database path: {os.path.expanduser('~/Mycode/MymoneyWeb/MymoneyWeb/finances.db')}", file=sys.stderr)

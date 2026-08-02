@@ -335,7 +335,19 @@ def render_word_card(word_data):
 
     # --- Audio (Streamlit widget, must live outside HTML) ---
     if audio_url:
-        st.audio(audio_url, format="audio/mpeg")
+        # Normalize protocol-relative URLs (e.g. //ssl.gstatic.com/... -> https://ssl.gstatic.com/...)
+        if audio_url.startswith("//"):
+            audio_url = "https:" + audio_url
+        try:
+            import requests as _req
+            audio_response = _req.get(audio_url, timeout=5)
+            if audio_response.status_code == 200:
+                import io
+                st.audio(io.BytesIO(audio_response.content), format="audio/mpeg")
+            else:
+                st.caption("🔇 Audio unavailable")
+        except Exception:
+            st.caption("🔇 Audio unavailable")
 
     # --- Styled action buttons ---
     st.markdown('<div class="wc-buttons">', unsafe_allow_html=True)

@@ -251,12 +251,13 @@ def render_word_card(word_data):
     level_colors = {"C2": "#4ade80", "C1": "#60a5fa", "B2": "#fbbf24"}
     accent = level_colors.get(level, "#94a3b8")
 
-    # --- Build image section: full-width hero with gradient overlay + word on top ---
+    # --- Build image section: full-width hero using <img> (background-image gets stripped by Streamlit Cloud CSP) ---
     if image_data.get("url"):
         photographer = image_data.get('photographer', 'Unknown')
         photographer_url = image_data.get('photographer_url', '#')
         image_section = (
-            f'<div class="wc-hero" style="background-image:url({image_data["url"]})">'
+            f'<div class="wc-hero">'
+            f'<img src="{image_data["url"]}" alt="Image of {word_display}" style="width:100%;height:320px;object-fit:cover;object-position:center;display:block;">'
             f'<div class="wc-hero-overlay" style="background:linear-gradient(to bottom, rgba(15,23,42,0.2) 0%, rgba(15,23,42,0.92) 100%);">'
             f'<div class="wc-hero-content">'
             f'<div class="wc-title-row">'
@@ -298,7 +299,7 @@ def render_word_card(word_data):
     st.markdown(f"""<style>
 .wc-card {{background:rgba(15,23,42,0.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid {accent}44;border-radius:20px;overflow:hidden;box-shadow:0 0 32px {accent}22, 0 8px 32px rgba(0,0,0,0.5);transition:box-shadow 0.3s,transform 0.3s;margin:16px 0;}}
 .wc-card:hover {{box-shadow:0 0 48px {accent}44, 0 12px 40px rgba(0,0,0,0.6);transform:translateY(-3px);}}
-.wc-hero {{width:100%;height:320px;background-size:cover;background-position:center;position:relative;}}
+.wc-hero {{width:100%;position:relative;overflow:hidden;}}
 .wc-hero-overlay {{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:20px;}}
 .wc-hero-content {{display:flex;flex-direction:column;gap:4px;}}
 .wc-emoji-hero {{padding:28px 24px 20px;text-align:center;background:linear-gradient(145deg,#1e293b,#0f172a);}}

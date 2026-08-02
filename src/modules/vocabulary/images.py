@@ -10,8 +10,9 @@ from .emoji import get_emoji
 class ImageAPI:
     def __init__(self):
         try:
-            self.api_key = st.secrets.get("PEXELS_API_KEY", None)
-        except:
+            # Try nested under [prod] section first (staging/prod), then fall back to top-level (dev)
+            self.api_key = st.secrets.get("prod", {}).get("PEXELS_API_KEY") or st.secrets.get("PEXELS_API_KEY", None)
+        except Exception:
             self.api_key = None
         
         self.base_url = "https://api.pexels.com/v1"

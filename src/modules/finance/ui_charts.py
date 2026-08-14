@@ -1,5 +1,5 @@
 import streamlit as st
-from src.modules.finance.plots import create_river_chart, create_net_chart, prepare_grouped_data
+from src.modules.finance.plots import create_river_chart, create_net_chart, prepare_grouped_data, create_projected_river_chart
 from src.modules.finance.data import get_all_transactions
 from .ui_table import add_balance_column
 
@@ -19,6 +19,25 @@ def render_charts(df=None):
     fig_river = create_river_chart(df_with_balance)
     if fig_river:
         st.plotly_chart(fig_river, use_container_width=True, config={'displayModeBar': False})
+
+    # ── Projected balance ───────────────────────────────────────────────────
+    rate = st.session_state.get('display_rate', 3.766)
+    col_label, col_slider = st.columns([2, 1])
+    with col_label:
+        st.caption("🔮 Projected Balance (USD) — based on completed months")
+    with col_slider:
+        days_ahead = st.select_slider(
+            "Horizon",
+            options=[30, 60, 90, 180],
+            value=90,
+            label_visibility="collapsed",
+            key="proj_horizon"
+        )
+    fig_proj = create_projected_river_chart(df_with_balance, days_ahead=days_ahead, rate=rate)
+    if fig_proj:
+        st.plotly_chart(fig_proj, use_container_width=True, config={'displayModeBar': False})
+    else:
+        st.info("Not enough completed months to project balance.")
 
     st.caption("📊 Net Change (Deposits - Withdrawals) - PLN")
     tab1, tab2, tab3 = st.tabs(["📅 Daily", "📆 Weekly", "📊 Monthly"])
